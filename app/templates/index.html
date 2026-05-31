@@ -690,24 +690,50 @@
         badge.classList.remove("hidden");
       }
 
+      function mapWeatherErrorMessage(message) {
+        const text = String(message || "").trim();
+        if (!text) return "โหลดพยากรณ์อากาศจาก TMD ไม่สำเร็จ";
+        if (text.includes("TMD access token is not configured")) {
+          return "ยังไม่ได้ตั้งค่า TMD_ACCESS_TOKEN ในไฟล์ .env";
+        }
+        if (text.includes("TMD API error: 401")) {
+          return "TMD token ไม่ถูกต้องหรือหมดอายุ (401)";
+        }
+        if (text.includes("province is required")) {
+          return "กรุณาระบุจังหวัดก่อนโหลดพยากรณ์";
+        }
+        if (text.includes("place not found in TMD")) {
+          return "ไม่พบพื้นที่ในฐานข้อมูล TMD (ลองเริ่มจากกรอกเฉพาะจังหวัด)";
+        }
+        return text;
+      }
+
+      async function fetchJsonOrThrow(url) {
+        const response = await fetch(url);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = payload && typeof payload === "object" ? payload.detail : null;
+          throw new Error(typeof detail === "string" && detail.trim() ? detail : `HTTP ${response.status}`);
+        }
+        return payload;
+      }
+
       async function loadWeatherAndSummary(place) {
         const container = document.getElementById("weatherForecast");
         container.innerHTML = '<p class="weather-empty">กำลังโหลดพยากรณ์อากาศจาก TMD...</p>';
         try {
           const queryString = buildPlaceQuery(place);
-          const [weatherRes, summaryRes] = await Promise.all([
-            fetch(`/api/weather?${queryString}`),
-            fetch(`/api/farm-summary?${queryString}`),
+          const [weatherData, summaryData] = await Promise.all([
+            fetchJsonOrThrow(`/api/weather?${queryString}`),
+            fetchJsonOrThrow(`/api/farm-summary?${queryString}`),
           ]);
-          if (!weatherRes.ok || !summaryRes.ok) throw new Error("api error");
-          const weatherData = await weatherRes.json();
-          const summaryData = await summaryRes.json();
           renderWeatherCards(weatherData);
           renderFarmSummary(summaryData.summary);
           setLocationBadge(place, weatherData.location);
           localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(place));
-        } catch {
-          container.innerHTML = '<p class="weather-empty weather-error"><i class="bi bi-exclamation-triangle-fill"></i> โหลดพยากรณ์อากาศจาก TMD ไม่สำเร็จ</p>';
+        } catch (err) {
+          const humanMessage = mapWeatherErrorMessage(err && err.message);
+          container.innerHTML = `<p class="weather-empty weather-error"><i class="bi bi-exclamation-triangle-fill"></i> ${humanMessage}</p>`;
         }
       }
 
