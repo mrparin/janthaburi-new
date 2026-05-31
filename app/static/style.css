@@ -1,25 +1,25 @@
 :root {
-  --bg: #f3f6ef;
-  --bg-soft: #eaf1e8;
-  --surface: #ffffff;
-  --surface-soft: #f8faf6;
-  --surface-warm: #fffaf2;
-  --text: #122329;
-  --muted: #5c6f73;
-  --border: #d1ded3;
-  --border-strong: #a9bcae;
-  --green: #186b4e;
-  --green-soft: #e0f3e8;
-  --blue: #146a9f;
-  --blue-soft: #e2f2fb;
-  --soil: #7d5532;
-  --soil-soft: #f4ead9;
-  --amber: #c47b16;
-  --amber-soft: #fff3d5;
-  --danger: #be2730;
-  --danger-soft: #ffe9e6;
-  --shadow: 0 12px 34px rgba(24, 43, 35, 0.08);
-  --shadow-soft: 0 4px 14px rgba(24, 43, 35, 0.08);
+  --bg: #f6f0df;
+  --bg-soft: #ede4ca;
+  --surface: #fffaf0;
+  --surface-soft: #fbf3df;
+  --surface-warm: #fff4d8;
+  --text: #243126;
+  --muted: #6f775f;
+  --border: #e2d5b9;
+  --border-strong: #cbb78d;
+  --green: #4f7f2d;
+  --green-soft: #edf4da;
+  --blue: #3e7f7f;
+  --blue-soft: #e4f2ec;
+  --soil: #8a5a2b;
+  --soil-soft: #f3e7cf;
+  --amber: #d9a441;
+  --amber-soft: #fff0c9;
+  --danger: #b93b32;
+  --danger-soft: #ffe8df;
+  --shadow: 0 12px 34px rgba(84, 65, 33, 0.1);
+  --shadow-soft: 0 4px 14px rgba(84, 65, 33, 0.1);
   --radius: 8px;
 }
 
@@ -35,8 +35,8 @@ body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(24, 107, 78, 0.12), transparent 34rem),
-    linear-gradient(180deg, #f8faf5 0%, var(--bg) 44%, #edf4ef 100%);
+    radial-gradient(circle at top left, rgba(155, 191, 59, 0.18), transparent 34rem),
+    linear-gradient(180deg, #fffaf0 0%, var(--bg) 44%, #eee4cc 100%);
   color: var(--text);
 }
 
@@ -54,8 +54,8 @@ input {
   padding: 1.35rem clamp(1rem, 3vw, 2.5rem);
   border-bottom: 1px solid var(--border);
   background:
-    linear-gradient(90deg, rgba(248, 250, 245, 0.97) 0%, rgba(248, 250, 245, 0.88) 36%, rgba(248, 250, 245, 0.4) 67%, rgba(248, 250, 245, 0.2) 100%),
-    linear-gradient(180deg, rgba(18, 35, 41, 0) 0%, rgba(18, 35, 41, 0.13) 100%),
+    linear-gradient(90deg, rgba(255, 250, 240, 0.98) 0%, rgba(255, 250, 240, 0.9) 36%, rgba(255, 250, 240, 0.46) 68%, rgba(255, 250, 240, 0.18) 100%),
+    linear-gradient(180deg, rgba(36, 49, 38, 0) 0%, rgba(36, 49, 38, 0.12) 100%),
     image-set(url("/static/assets/banner-agri-iot.webp") type("image/webp"), url("/static/assets/banner-agri-iot.png") type("image/png"));
   background-position: center;
   background-size: cover;
@@ -63,7 +63,7 @@ input {
   top: 0;
   z-index: 20;
   overflow: hidden;
-  box-shadow: 0 12px 34px rgba(24, 43, 35, 0.1);
+  box-shadow: 0 12px 34px rgba(84, 65, 33, 0.12);
 }
 
 .topbar-copy {
@@ -111,7 +111,7 @@ h1 {
 
 .badge {
   background: var(--blue-soft);
-  border: 1px solid #b8dced;
+  border: 1px solid #b5d7cc;
   border-radius: 999px;
   color: var(--blue);
   flex: 0 0 auto;
@@ -188,7 +188,7 @@ h1 {
   height: 11px;
   border-radius: 999px;
   background: var(--amber);
-  box-shadow: 0 0 0 5px rgba(196, 123, 22, 0.15);
+  box-shadow: 0 0 0 5px rgba(217, 164, 65, 0.18);
   flex: 0 0 auto;
 }
 
@@ -212,7 +212,7 @@ h1 {
 
 .connection-widget.conn-online {
   background: var(--green-soft);
-  border-color: #9ed4b6;
+  border-color: #c4d99a;
 }
 
 .connection-widget.conn-online .connection-state,
@@ -222,12 +222,12 @@ h1 {
 
 .connection-widget.conn-online .connection-dot {
   background: var(--green);
-  box-shadow: 0 0 0 5px rgba(24, 107, 78, 0.15);
+  box-shadow: 0 0 0 5px rgba(79, 127, 45, 0.16);
 }
 
 .connection-widget.conn-offline {
   background: var(--danger-soft);
-  border-color: #f1b1aa;
+  border-color: #efb9a9;
 }
 
 .connection-widget.conn-offline .connection-state,
@@ -238,12 +238,12 @@ h1 {
 
 .connection-widget.conn-offline .connection-dot {
   background: var(--danger);
-  box-shadow: 0 0 0 5px rgba(190, 39, 48, 0.15);
+  box-shadow: 0 0 0 5px rgba(185, 59, 50, 0.16);
 }
 
 .connection-widget.conn-checking {
   background: var(--amber-soft);
-  border-color: #f3d48f;
+  border-color: #e6c36f;
 }
 
 .status-grid {
@@ -300,7 +300,7 @@ h1 {
 
 .status-alkaline {
   background: var(--blue-soft);
-  border-color: #9fd1ec;
+  border-color: #b5d7cc;
 }
 
 .status-alkaline .level,
@@ -316,7 +316,7 @@ h1 {
 .status-near_neutral,
 .status-acid {
   background: var(--amber-soft);
-  border-color: #f2cf87;
+  border-color: #e6c36f;
 }
 
 .status-too_low .level,
@@ -342,7 +342,7 @@ h1 {
 
 .status-optimal {
   background: var(--green-soft);
-  border-color: #9ed4b6;
+  border-color: #c4d99a;
 }
 
 .status-optimal .level,
@@ -354,7 +354,7 @@ h1 {
 .status-danger,
 .status-strong_acid {
   background: var(--danger-soft);
-  border-color: #efaaa4;
+  border-color: #efb9a9;
 }
 
 .status-danger .level,
@@ -392,7 +392,7 @@ h1 {
 .bi-brightness-high,
 .bi-sun,
 .bi-speedometer2 {
-  color: var(--blue);
+  color: var(--green);
 }
 
 .soil-group .group-title,
@@ -406,7 +406,7 @@ h1 {
 .bi-droplet-half,
 .bi-water,
 .bi-cloud-drizzle {
-  color: #208bb8;
+  color: var(--blue);
 }
 
 .bi-lightning-charge,
@@ -438,7 +438,7 @@ h1 {
 }
 
 .kpi::before {
-  background: var(--blue);
+  background: var(--green);
   content: "";
   inset: 0 auto 0 0;
   position: absolute;
@@ -470,7 +470,7 @@ h1 {
 }
 
 .kpi small {
-  color: var(--blue);
+  color: var(--green);
   font-size: 0.9rem;
   font-weight: 800;
 }
@@ -584,12 +584,12 @@ h1 {
 
 .weather-search-input:focus {
   background: #fff;
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(20, 106, 159, 0.13);
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(79, 127, 45, 0.14);
 }
 
 .weather-search-input::placeholder {
-  color: #8ba1a5;
+  color: #9a927c;
 }
 
 .weather-load-btn {
@@ -642,7 +642,7 @@ h1 {
 }
 
 .weather-search-results li:hover {
-  background: var(--blue-soft);
+  background: var(--green-soft);
 }
 
 .weather-no-result {
@@ -653,7 +653,7 @@ h1 {
 .weather-location-badge {
   align-self: end;
   background: var(--green-soft);
-  border: 1px solid #b8dfc8;
+  border: 1px solid #c4d99a;
   border-radius: 999px;
   color: var(--green);
   font-size: 0.88rem;
@@ -711,27 +711,27 @@ h1 {
 
 .weather-day-card:first-child {
   background: var(--amber-soft);
-  border-color: #ebc67d;
+  border-color: #e6c36f;
 }
 
 .weather-cond-sun {
   background: var(--amber-soft);
-  border-color: #ebc67d;
+  border-color: #e6c36f;
 }
 
 .weather-cond-cloud {
   background: var(--blue-soft);
-  border-color: #a9d4ea;
+  border-color: #b5d7cc;
 }
 
 .weather-cond-rain {
-  background: #e7f6fb;
-  border-color: #8fcde1;
+  background: #e9f5eb;
+  border-color: #b8d4b6;
 }
 
 .weather-cond-storm {
   background: var(--danger-soft);
-  border-color: #eba49d;
+  border-color: #efb9a9;
 }
 
 .weather-cond-storm .weather-day-icon,
@@ -833,22 +833,22 @@ h1 {
 
 .summary-normal {
   background: var(--green-soft);
-  border-color: #b8dfc8;
+  border-color: #c4d99a;
 }
 
 .summary-warning {
   background: var(--amber-soft);
-  border-color: #f2cf87;
+  border-color: #e6c36f;
 }
 
 .summary-danger {
   background: var(--danger-soft);
-  border-color: #efaaa4;
+  border-color: #efb9a9;
 }
 
 .footer {
-  background: #142a23;
-  color: #e8f4ea;
+  background: #2f541f;
+  color: #fffaf0;
   margin-top: 1.5rem;
   padding: 1.15rem;
   text-align: center;
@@ -865,7 +865,7 @@ h1 {
 }
 
 .footer-line2 {
-  color: #bcd6c6;
+  color: #dfddb7;
   font-size: 0.9rem;
   margin-top: 0.25rem;
 }
@@ -899,7 +899,7 @@ h1 {
     flex-direction: column;
     min-height: 230px;
     background:
-      linear-gradient(180deg, rgba(248, 250, 245, 0.98) 0%, rgba(248, 250, 245, 0.92) 48%, rgba(248, 250, 245, 0.5) 100%),
+      linear-gradient(180deg, rgba(255, 250, 240, 0.98) 0%, rgba(255, 250, 240, 0.92) 48%, rgba(255, 250, 240, 0.54) 100%),
       image-set(url("/static/assets/banner-agri-iot.webp") type("image/webp"), url("/static/assets/banner-agri-iot.png") type("image/png"));
     background-position: 58% center;
     background-size: cover;

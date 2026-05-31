@@ -193,9 +193,9 @@
       }
 
 
-      const axisLabelColor = "#5c6f73";
-      const axisTickColor = "#5c6f73";
-      const chartGridColor = "rgba(92, 111, 115, 0.16)";
+      const axisLabelColor = "#6f775f";
+      const axisTickColor = "#6f775f";
+      const chartGridColor = "rgba(111, 119, 95, 0.18)";
 
       // Improve tooltip reliability on dense/small points.
       Chart.defaults.color = axisTickColor;
@@ -207,7 +207,7 @@
 
       const vpdChart = new Chart(document.getElementById("vpdChart"), {
         type: "line",
-        data: { labels: [], datasets: [{ label: "VPD kPa", data: [], tension: 0.25, borderColor: "#c47b16", backgroundColor: "#c47b16" }] },
+        data: { labels: [], datasets: [{ label: "VPD kPa", data: [], tension: 0.25, borderColor: "#d9a441", backgroundColor: "#d9a441" }] },
         options: {
           animation: false,
           plugins: { legend: { display: false } },
@@ -228,7 +228,7 @@
 
       const phChart = new Chart(document.getElementById("phChart"), {
         type: "line",
-        data: { labels: [], datasets: [{ label: "pH", data: [], tension: 0.25, borderColor: "#be2730", backgroundColor: "#be2730" }] },
+        data: { labels: [], datasets: [{ label: "pH", data: [], tension: 0.25, borderColor: "#b93b32", backgroundColor: "#b93b32" }] },
         options: {
           animation: false,
           plugins: { legend: { display: false } },
@@ -484,8 +484,8 @@
         data: {
           labels: [],
           datasets: [
-            { label: "อุณหภูมิอากาศ (°C)", data: [], borderColor: "#146a9f", backgroundColor: "#146a9f", tension: 0.25, yAxisID: "yTemp" },
-            { label: "ความชื้นอากาศ (%RH)", data: [], borderColor: "#1f9bbd", backgroundColor: "#1f9bbd", tension: 0.25, yAxisID: "yHumi" },
+            { label: "อุณหภูมิอากาศ (°C)", data: [], borderColor: "#4f7f2d", backgroundColor: "#4f7f2d", tension: 0.25, yAxisID: "yTemp" },
+            { label: "ความชื้นอากาศ (%RH)", data: [], borderColor: "#3e7f7f", backgroundColor: "#3e7f7f", tension: 0.25, yAxisID: "yHumi" },
           ],
         },
         options: {
@@ -521,8 +521,8 @@
         data: {
           labels: [],
           datasets: [
-            { label: "อุณหภูมิดิน (°C)", data: [], borderColor: "#7d5532", backgroundColor: "#7d5532", tension: 0.25, yAxisID: "yTemp" },
-            { label: "ความชื้นดิน (%)", data: [], borderColor: "#186b4e", backgroundColor: "#186b4e", tension: 0.25, yAxisID: "yHumi" },
+            { label: "อุณหภูมิดิน (°C)", data: [], borderColor: "#8a5a2b", backgroundColor: "#8a5a2b", tension: 0.25, yAxisID: "yTemp" },
+            { label: "ความชื้นดิน (%)", data: [], borderColor: "#4f7f2d", backgroundColor: "#4f7f2d", tension: 0.25, yAxisID: "yHumi" },
           ],
         },
         options: {
