@@ -253,10 +253,13 @@ sudo systemctl restart durian-dashboard
 **ขั้นตอนที่ 2: ดึงข้อมูลโปรเจกต์ใหม่จาก GitHub**
 เราแนะนำให้ติดตั้งโปรเจกต์นี้ไว้ที่โฟลเดอร์ `/opt/durian-dashboard` เพื่อให้สอดคล้องกับสคริปต์ควบคุมและชื่อ Service มาตรฐาน:
 
-*หมายเหตุ: เนื่องจากเครื่องเดิมมีโฟลเดอร์ `/opt/durian-dashboard` อยู่แล้ว หากรันคำสั่ง `git clone` จะขึ้นข้อผิดพลาดแจ้งว่าโฟลเดอร์ไม่ว่าง ให้สั่งเปลี่ยนชื่อโฟลเดอร์เก่าเพื่อสำรองข้อมูลไว้ก่อน ดังนี้:*
+*หมายเหตุ: เนื่องจากเครื่องเดิมอาจมีทั้งโฟลเดอร์ `/opt/durian-dashboard` และโฟลเดอร์สำรองเดิมอยู่แล้ว เช่น `/opt/durian-dashboard-old` หากรัน `mv /opt/durian-dashboard /opt/durian-dashboard-old` ตอนที่ปลายทางมีอยู่ก่อน ระบบจะพยายามย้ายเข้าไปเป็น `/opt/durian-dashboard-old/durian-dashboard` และจะ error ถ้าปลายทางนั้นมีข้อมูลอยู่แล้ว ดังนั้นให้ใช้ชื่อโฟลเดอร์สำรองที่ไม่ซ้ำแทน เช่น ใส่วันที่ต่อท้าย:*
 ```bash
-sudo mv /opt/durian-dashboard /opt/durian-dashboard-old
+sudo ls -ld /opt/durian-dashboard /opt/durian-dashboard-old*
+sudo mv /opt/durian-dashboard /opt/durian-dashboard-old-$(date +%Y%m%d-%H%M%S)
 ```
+
+*ถ้าต้องการใช้ชื่อเดิมจริงๆ ให้ลบหรือเปลี่ยนชื่อ `/opt/durian-dashboard-old` เดิมก่อน แล้วค่อยสั่ง `mv` ใหม่*
 
 1. ดาวน์โหลด (clone) โปรเจกต์ใหม่จาก repository นี้:
    ```bash
@@ -271,9 +274,9 @@ sudo mv /opt/durian-dashboard /opt/durian-dashboard-old
 **ขั้นตอนที่ 3: โยกย้ายฐานข้อมูลและไฟล์ตั้งค่าเก่า (ทางเลือก/ถ้ามี)**
 * **กรณีต้องการรักษาข้อมูลประวัติย้อนหลัง:** ให้คัดลอกไฟล์ฐานข้อมูล SQLite จากโฟลเดอร์สำรองเก่ามาไว้ในโฟลเดอร์ใหม่:
   ```bash
-  cp /opt/durian-dashboard-old/data/durian_dashboard.db /opt/durian-dashboard/data/durian_dashboard.db
+  cp /opt/durian-dashboard-old-YYYYMMDD-HHMMSS/data/durian_dashboard.db /opt/durian-dashboard/data/durian_dashboard.db
   ```
-* **กรณีต้องการใช้ค่าคอนฟิกเดิม:** ตรวจสอบค่าต่างๆ ในไฟล์ `.env` เดิม (เช่น `MQTT_HOST`, `MQTT_TOPIC`, `RETAIN_DAYS` ฯลฯ) จากโฟลเดอร์สำรองเก่า `/opt/durian-dashboard-old/.env` แล้วนำมาใส่ไว้ในไฟล์ `.env` ของโฟลเดอร์ใหม่:
+* **กรณีต้องการใช้ค่าคอนฟิกเดิม:** ตรวจสอบค่าต่างๆ ในไฟล์ `.env` เดิม (เช่น `MQTT_HOST`, `MQTT_TOPIC`, `RETAIN_DAYS` ฯลฯ) จากโฟลเดอร์สำรองเก่า เช่น `/opt/durian-dashboard-old-YYYYMMDD-HHMMSS/.env` แล้วนำมาใส่ไว้ในไฟล์ `.env` ของโฟลเดอร์ใหม่:
   ```bash
   cd /opt/durian-dashboard
   cp .env.example .env
