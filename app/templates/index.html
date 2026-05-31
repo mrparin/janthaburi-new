@@ -21,7 +21,12 @@
         <h1><i class="bi bi-tree-fill" aria-hidden="true"></i> สวนพรรณมณี</h1>
         <p class="sub">Realtime MQTT: {{ topic }}</p>
       </div>
-      <span id="updatedAt" class="badge">Waiting for data...</span>
+      <div class="topbar-actions">
+        <button id="lineAlertToggleBtn" class="line-alert-toggle line-alert-off" type="button" aria-pressed="false">
+          <i class="bi bi-bell-slash-fill" aria-hidden="true"></i> LINE Auto Alert: OFF
+        </button>
+        <span id="updatedAt" class="badge">Waiting for data...</span>
+      </div>
     </header>
 
     <main class="layout">
@@ -152,6 +157,65 @@
         amphoe: (document.body.dataset.defaultAmphoe || "").trim(),
         tambon: (document.body.dataset.defaultTambon || "").trim(),
       };
+      const lineAlertToggleBtn = document.getElementById("lineAlertToggleBtn");
+
+      function renderLineAlertStatus(status) {
+        if (!lineAlertToggleBtn || !status) return;
+        const enabled = Boolean(status.enabled);
+        const effectiveEnabled = Boolean(status.effective_enabled);
+        const configured = Boolean(status.notifier_configured) && Boolean(status.has_default_place);
+
+        lineAlertToggleBtn.classList.remove("line-alert-on", "line-alert-off", "line-alert-blocked");
+        lineAlertToggleBtn.classList.add(enabled ? "line-alert-on" : "line-alert-off");
+        lineAlertToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
+
+        const iconClass = enabled ? "bi-bell-fill" : "bi-bell-slash-fill";
+        const text = enabled ? "LINE Auto Alert: ON" : "LINE Auto Alert: OFF";
+        lineAlertToggleBtn.innerHTML = `<i class="bi ${iconClass}" aria-hidden="true"></i> ${text}`;
+
+        if (!configured) {
+          lineAlertToggleBtn.classList.add("line-alert-blocked");
+          lineAlertToggleBtn.title = "ยังไม่พร้อมใช้งาน: กรุณาตั้งค่า LINE token/user และ TMD_PROVINCE";
+        } else if (!effectiveEnabled && enabled) {
+          lineAlertToggleBtn.classList.add("line-alert-blocked");
+          lineAlertToggleBtn.title = "เปิดไว้ แต่ยังส่งอัตโนมัติไม่ได้จากเงื่อนไขระบบ";
+        } else {
+          lineAlertToggleBtn.title = "กดเพื่อสลับเปิด/ปิดการแจ้งเตือน LINE อัตโนมัติ";
+        }
+      }
+
+      async function refreshLineAlertStatus() {
+        try {
+          const res = await fetch("/api/line/alert-status", { cache: "no-store" });
+          if (!res.ok) return;
+          const status = await res.json();
+          renderLineAlertStatus(status);
+        } catch (err) {
+          console.warn("Failed to load LINE alert status:", err);
+        }
+      }
+
+      async function toggleLineAlert() {
+        if (!lineAlertToggleBtn) return;
+        lineAlertToggleBtn.disabled = true;
+        try {
+          const res = await fetch("/api/line/alert-toggle", { method: "POST" });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(payload.detail || "toggle failed");
+          }
+          renderLineAlertStatus(payload);
+        } catch (err) {
+          console.warn("Failed to toggle LINE alert:", err);
+        } finally {
+          lineAlertToggleBtn.disabled = false;
+        }
+      }
+
+      if (lineAlertToggleBtn) {
+        lineAlertToggleBtn.addEventListener("click", toggleLineAlert);
+      }
+      refreshLineAlertStatus();
 
       const viewSwitchRoot = document.getElementById("viewSwitch");
       const viewButtons = Array.from(document.querySelectorAll(".view-btn"));
@@ -659,6 +723,51 @@
 
       const DAYS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"];
       const WEATHER_LOC_KEY = "weather_location_tmd_place";
+      const WEATHER_AUTO_REFRESH_MS = 15 * 60 * 1000;
+
+      let activeWeatherPlace = null;
+      let weatherAutoRefreshTimer = null;
+      let weatherMidnightRefreshTimer = null;
+      let weatherLoading = false;
+
+      function isSameLocalDate(a, b) {
+        return (
+          a.getFullYear() === b.getFullYear() &&
+          a.getMonth() === b.getMonth() &&
+          a.getDate() === b.getDate()
+        );
+      }
+
+      function msUntilNextLocalMidnight() {
+        const now = new Date();
+        const nextMidnight = new Date(now);
+        nextMidnight.setHours(24, 0, 2, 0);
+        return Math.max(1000, nextMidnight.getTime() - now.getTime());
+      }
+
+      async function refreshWeatherForActivePlace() {
+        if (!activeWeatherPlace || weatherLoading) return;
+        await loadWeatherAndSummary(activeWeatherPlace, { persist: false });
+      }
+
+      function setupWeatherAutoRefresh() {
+        if (weatherAutoRefreshTimer) {
+          clearInterval(weatherAutoRefreshTimer);
+        }
+        weatherAutoRefreshTimer = setInterval(() => {
+          refreshWeatherForActivePlace();
+        }, WEATHER_AUTO_REFRESH_MS);
+      }
+
+      function setupWeatherMidnightRefresh() {
+        if (weatherMidnightRefreshTimer) {
+          clearTimeout(weatherMidnightRefreshTimer);
+        }
+        weatherMidnightRefreshTimer = setTimeout(async () => {
+          await refreshWeatherForActivePlace();
+          setupWeatherMidnightRefresh();
+        }, msUntilNextLocalMidnight());
+      }
 
       function buildPlaceQuery(place) {
         const params = new URLSearchParams();
@@ -712,9 +821,9 @@
           return;
         }
         container.innerHTML = "";
-        days.forEach((forecast, i) => {
+        days.forEach((forecast) => {
           const d = new Date(forecast.time);
-          const dayLabel = i === 0 ? "วันนี้" : DAYS_TH[d.getDay()];
+          const dayLabel = isSameLocalDate(d, new Date()) ? "วันนี้" : DAYS_TH[d.getDay()];
           const cond = forecast.cond;
           const icon = TMD_COND_ICONS[cond] || "bi-cloud";
           const desc = TMD_COND_DESC[cond] || "ไม่ระบุ";
@@ -755,19 +864,22 @@
         badge.classList.remove("hidden");
       }
 
-      async function loadWeatherAndSummary(place) {
+      async function loadWeatherAndSummary(place, options = {}) {
         const container = document.getElementById("weatherForecast");
         container.innerHTML = '<p class="weather-empty">กำลังโหลดพยากรณ์อากาศจาก TMD...</p>';
+        weatherLoading = true;
+        const persist = options.persist !== false;
         const normalizedPlace = {
           province: (place.province || "").trim(),
           amphoe: (place.amphoe || "").trim(),
           tambon: (place.tambon || "").trim(),
         };
+        activeWeatherPlace = normalizedPlace;
         try {
           const queryString = buildPlaceQuery(normalizedPlace);
           const [weatherRes, summaryRes] = await Promise.all([
-            fetch(`/api/weather?${queryString}`),
-            fetch(`/api/farm-summary?${queryString}`),
+            fetch(`/api/weather?${queryString}`, { cache: "no-store" }),
+            fetch(`/api/farm-summary?${queryString}`, { cache: "no-store" }),
           ]);
           if (!weatherRes.ok) {
             throw new Error(`โหลดข้อมูลอากาศไม่สำเร็จ: ${await parseApiError(weatherRes)}`);
@@ -780,11 +892,15 @@
           renderWeatherCards(weatherData);
           renderFarmSummary(summaryData.summary);
           setLocationBadge(normalizedPlace, weatherData.location);
-          localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(normalizedPlace));
+          if (persist) {
+            localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(normalizedPlace));
+          }
         } catch (err) {
           document.getElementById("weatherLocationName").classList.add("hidden");
           const msg = (err instanceof Error && err.message) ? err.message : "โหลดพยากรณ์อากาศจาก TMD ไม่สำเร็จ";
           container.innerHTML = `<p class="weather-empty weather-error"><i class="bi bi-exclamation-triangle-fill"></i> ${msg}</p>`;
+        } finally {
+          weatherLoading = false;
         }
       }
 
@@ -826,6 +942,16 @@
           loadWeatherAndSummary(defaultPlaceFromServer);
         }
       } catch { /* ignore */ }
+
+      setupWeatherAutoRefresh();
+      setupWeatherMidnightRefresh();
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          refreshWeatherForActivePlace();
+          refreshLineAlertStatus();
+        }
+      });
     </script>
   </body>
 </html>
