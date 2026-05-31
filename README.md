@@ -238,106 +238,112 @@ sudo bash scripts/setup_pi_kiosk.sh --yes
 sudo systemctl restart durian-dashboard
 ```
 
-### 2.1) การเปลี่ยนผ่านกรณีเครื่องเดิมเคยติดตั้งโปรแกรมเก่า (ที่ไม่ได้มาจาก repository นี้ หรือชื่อต่างกัน)
+### 2.1) แทนที่ของเดิมด้วย repo นี้ (ใช้ได้ทั้ง Raspberry Pi และ Ubuntu Server)
 
-หากเครื่อง Raspberry Pi ของคุณเคยติดตั้งระบบเวอร์ชันเดิมมาก่อน (เช่น รันด้วย Service ชื่ออื่น หรืออยู่ในโฟลเดอร์อื่นที่มีชื่อไม่ตรงกัน หรือดึงมาจาก Git repository ตัวเดิมที่ไม่ได้อัปเดต) และต้องการเปลี่ยนมาใช้งานโปรแกรมจาก repository นี้แทนอย่างสมบูรณ์ ให้ทำตามขั้นตอนด้านล่างนี้:
+ใช้ขั้นตอนนี้เมื่อเครื่องมีระบบเดิมติดตั้งอยู่แล้ว และต้องการเก็บของเดิมไว้ก่อนแล้วค่อยลงตัวใหม่ทับตำแหน่งเดิม
 
-**ขั้นตอนที่ 1: ตรวจสอบและหยุดการทำงานของระบบเดิม**
-1. ตรวจสอบชื่อ Service เก่าที่รันอยู่ในระบบ (มักมีชื่อคล้ายๆ `durian-dashboard` หรือชื่ออื่นตามที่คุณเคยตั้งไว้)
-2. สั่งหยุดการทำงาน (Stop) และยกเลิกการเริ่มทำงานอัตโนมัติตอนเปิดเครื่อง (Disable) ของระบบเก่า:
-   ```bash
-   sudo systemctl stop <ชื่อ-service-เก่า>
-   sudo systemctl disable <ชื่อ-service-เก่า>
-   ```
+กำหนดค่าพื้นฐานก่อน (แก้ค่าให้ตรงเครื่องของคุณ):
 
-**ขั้นตอนที่ 2: ดึงข้อมูลโปรเจกต์ใหม่จาก GitHub**
-เราแนะนำให้ติดตั้งโปรเจกต์นี้ไว้ที่โฟลเดอร์ `/opt/durian-dashboard` เพื่อให้สอดคล้องกับสคริปต์ควบคุมและชื่อ Service มาตรฐาน:
-
-*หมายเหตุ: เนื่องจากเครื่องเดิมอาจมีทั้งโฟลเดอร์ `/opt/durian-dashboard` และโฟลเดอร์สำรองเดิมอยู่แล้ว เช่น `/opt/durian-dashboard-old` หากรัน `mv /opt/durian-dashboard /opt/durian-dashboard-old` ตอนที่ปลายทางมีอยู่ก่อน ระบบจะพยายามย้ายเข้าไปเป็น `/opt/durian-dashboard-old/durian-dashboard` และจะ error ถ้าปลายทางนั้นมีข้อมูลอยู่แล้ว ดังนั้นให้ใช้ชื่อโฟลเดอร์สำรองที่ไม่ซ้ำแทน เช่น ใส่วันที่ต่อท้าย:*
 ```bash
-sudo ls -ld /opt/durian-dashboard /opt/durian-dashboard-old*
-sudo mv /opt/durian-dashboard /opt/durian-dashboard-old-$(date +%Y%m%d-%H%M%S)
+APP_DIR=/opt/durian-dashboard
+APP_USER=pi
+REPO_URL=https://github.com/mrparin/janthaburi-new.git
+BRANCH=01_addThrems
 ```
 
-*ถ้าต้องการใช้ชื่อเดิมจริงๆ ให้ลบหรือเปลี่ยนชื่อ `/opt/durian-dashboard-old` เดิมก่อน แล้วค่อยสั่ง `mv` ใหม่*
+> ถ้าเป็น Ubuntu Server มักใช้ `APP_USER=ubuntu` หรือ user จริงที่ใช้รัน service
 
-1. ดาวน์โหลด (clone) โปรเจกต์ใหม่จาก repository นี้:
-   ```bash
-   cd /opt
-   sudo git clone https://github.com/mrparin/Phanmanee.git durian-dashboard
-   ```
-2. เปลี่ยนสิทธิ์ความเป็นเจ้าของโฟลเดอร์ให้เหมาะสมกับผู้ใช้งาน (ตัวอย่างเป็น user `pi`):
-   ```bash
-   sudo chown -R pi:pi /opt/durian-dashboard
-   ```
+**ขั้นตอนที่ 1: หยุด service เดิม**
 
-**ขั้นตอนที่ 3: โยกย้ายฐานข้อมูลและไฟล์ตั้งค่าเก่า (ทางเลือก/ถ้ามี)**
-* **กรณีต้องการรักษาข้อมูลประวัติย้อนหลัง:** ให้คัดลอกไฟล์ฐานข้อมูล SQLite จากโฟลเดอร์สำรองเก่ามาไว้ในโฟลเดอร์ใหม่:
-  ```bash
-  cp /opt/durian-dashboard-old-YYYYMMDD-HHMMSS/data/durian_dashboard.db /opt/durian-dashboard/data/durian_dashboard.db
-  ```
-* **กรณีต้องการใช้ค่าคอนฟิกเดิม:** ตรวจสอบค่าต่างๆ ในไฟล์ `.env` เดิม (เช่น `MQTT_HOST`, `MQTT_TOPIC`, `RETAIN_DAYS` ฯลฯ) จากโฟลเดอร์สำรองเก่า เช่น `/opt/durian-dashboard-old-YYYYMMDD-HHMMSS/.env` แล้วนำมาใส่ไว้ในไฟล์ `.env` ของโฟลเดอร์ใหม่:
-  ```bash
-  cd /opt/durian-dashboard
-  cp .env.example .env
-  # จากนั้นเปิดแก้ไขไฟล์ .env เพื่อใส่ค่าคอนฟิกให้ตรงกับของเดิม
-  nano .env
-  ```
+```bash
+sudo systemctl stop durian-dashboard || true
+sudo systemctl disable durian-dashboard || true
+sudo systemctl list-units --type=service | grep -i durian || true
+```
 
-**ขั้นตอนที่ 4: รันสคริปต์ติดตั้งระบบใหม่**
-เลือกประเภทการติดตั้งที่ต้องการเพื่อสร้าง Virtual Environment, ติดตั้งไลบรารีที่จำเป็น และติดตั้ง Service ใหม่เข้าระบบ:
-* **แบบใช้งานจอภาพบนบอร์ด Pi (Kiosk Mode):**
-  ```bash
-  cd /opt/durian-dashboard
-  sudo bash scripts/setup_pi_kiosk.sh --yes
-  ```
-* **แบบรันเฉพาะหลังบ้าน (Service Only / Server):**
-  ```bash
-  cd /opt/durian-dashboard
-  sudo bash scripts/setup_pi_service_only.sh --yes
-  ```
+**ขั้นตอนที่ 2: backup โฟลเดอร์โปรเจกต์เดิม (ถ้ามี)**
 
-**ขั้นตอนที่ 5: ตรวจสอบการทำงานของระบบใหม่**
-ตรวจสอบว่า Service ตัวใหม่เริ่มทำงานและเปิดพอร์ตสำเร็จ:
+```bash
+if [ -d "$APP_DIR" ]; then
+  sudo mv "$APP_DIR" "${APP_DIR}-old-$(date +%Y%m%d-%H%M%S)"
+fi
+sudo ls -ld ${APP_DIR}-old-* 2>/dev/null || true
+```
+
+**ขั้นตอนที่ 3: clone repo ใหม่ลง path เดิม**
+
+```bash
+cd /opt
+sudo git clone -b "$BRANCH" "$REPO_URL" durian-dashboard
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+```
+
+**ขั้นตอนที่ 4: ย้ายค่า config/ฐานข้อมูลจาก backup เดิม (ทางเลือก)**
+
+```bash
+LAST_BACKUP=$(ls -dt ${APP_DIR}-old-* 2>/dev/null | head -n 1)
+cd "$APP_DIR"
+cp .env.example .env
+
+# ถ้ามีไฟล์ .env เดิม ให้คัดลอกมาทับ
+if [ -n "$LAST_BACKUP" ] && [ -f "$LAST_BACKUP/.env" ]; then
+  cp "$LAST_BACKUP/.env" .env
+fi
+
+# ถ้ามีฐานข้อมูลเดิม ให้คัดลอกมาทับ
+if [ -n "$LAST_BACKUP" ] && [ -f "$LAST_BACKUP/data/durian_dashboard.db" ]; then
+  cp "$LAST_BACKUP/data/durian_dashboard.db" data/durian_dashboard.db
+fi
+
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+sudo chmod 600 "$APP_DIR/.env"
+```
+
+**ขั้นตอนที่ 5: ติดตั้ง service ใหม่**
+
+- Raspberry Pi แบบ Kiosk:
+
+```bash
+cd "$APP_DIR"
+sudo PI_USER="$APP_USER" APP_DIR="$APP_DIR" bash scripts/setup_pi_kiosk.sh --yes
+```
+
+- Raspberry Pi/Ubuntu แบบ Service Only:
+
+```bash
+cd "$APP_DIR"
+sudo PI_USER="$APP_USER" APP_DIR="$APP_DIR" bash scripts/setup_pi_service_only.sh --yes
+```
+
+**ขั้นตอนที่ 6: ตรวจสอบหลังติดตั้ง**
+
 ```bash
 sudo systemctl status durian-dashboard --no-pager
-sudo ss -tulpn | grep 8080
+sudo ss -tulpn | grep 8080 || true
+sudo journalctl -u durian-dashboard -n 100 --no-pager
 ```
 
-**ขั้นตอนที่ 6: ลบไฟล์ของระบบเก่า (เพื่อความสะอาด)**
-เมื่อระบบใหม่ทำงานได้อย่างถูกต้องเรียบร้อยแล้ว สามารถลบโฟลเดอร์เก่าและไฟล์ Service เดิมเพื่อไม่ให้เกิดความสับสน:
-```bash
-# ลบไฟล์ Service เก่าออกจากการจัดระบบของ systemd
-sudo rm /etc/systemd/system/<ชื่อ-service-เก่า>.service
-sudo systemctl daemon-reload
-
-# ลบโฟลเดอร์โปรเจกต์เดิม (ระมัดระวังตอนระบุ path)
-sudo rm -rf /opt/<โฟลเดอร์โปรเจกต์เดิม>
-```
-
-### 3) ติดตั้งไปยังเครื่อง server ใหม่ (user ไม่เหมือน Raspberry Pi)
-
-กรณีเครื่องใหม่มี user ไม่ใช่ `pi` (ตัวอย่างใช้ `bigdata`):
+**ขั้นตอนที่ 7: rollback กลับของเดิม (ถ้าจำเป็น)**
 
 ```bash
-cd /opt/durian-dashboard
-sudo PI_USER=bigdata APP_DIR=/opt/durian-dashboard bash scripts/setup_pi_service_only.sh --yes
+sudo systemctl stop durian-dashboard
+sudo mv "$APP_DIR" "${APP_DIR}-failed-$(date +%Y%m%d-%H%M%S)"
+sudo mv "$LAST_BACKUP" "$APP_DIR"
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+sudo systemctl start durian-dashboard
 ```
 
-ตรวจว่า service ถูก deploy ด้วย user/group ที่ถูกต้อง:
+### 3) หมายเหตุสำหรับ Ubuntu Server
+
+- ถ้าไม่มี desktop environment ให้ใช้ `setup_pi_service_only.sh` เท่านั้น
+- แนะนำให้รันด้วย user ปกติ (ไม่ใช้ root) เช่น `ubuntu`, `bigdata`
+- ตรวจ user/group ของ service ได้ด้วยคำสั่ง:
 
 ```bash
 sudo systemctl cat durian-dashboard | grep -E '^(User|Group)='
 ```
 
-ตัวอย่างผลที่ควรได้:
-
-```bash
-User=bigdata
-Group=bigdata
-```
-
-ถ้าพอร์ต 8080 ถูกใช้งานอยู่แล้ว ให้เปลี่ยนพอร์ตในไฟล์ service แล้ว reload:
+- ถ้าพอร์ต 8080 ถูกใช้งานอยู่แล้ว ให้แก้พอร์ตในไฟล์ service แล้ว reload:
 
 ```bash
 sudo sed -i 's/--port 8080/--port 8081/' /etc/systemd/system/durian-dashboard.service
