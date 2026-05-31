@@ -9,7 +9,12 @@
     <link rel="stylesheet" href="/static/style.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
-  <body>
+  <body
+    data-default-province="{{ tmd_province }}"
+    data-default-amphoe="{{ tmd_amphoe }}"
+    data-default-tambon="{{ tmd_tambon }}"
+    data-default-forecast-days="{{ tmd_forecast_days }}"
+  >
     <header class="topbar">
       <div class="topbar-copy">
         <span class="eyebrow">Durian IoT Operations</span>
@@ -20,7 +25,13 @@
     </header>
 
     <main class="layout">
-      <section class="hero-grid">
+      <nav id="viewSwitch" class="view-switch" aria-label="Dashboard views">
+        <button type="button" class="view-btn is-active" data-target="live"><i class="bi bi-broadcast"></i> สถานะสด</button>
+        <button type="button" class="view-btn" data-target="weather"><i class="bi bi-cloud-sun"></i> พยากรณ์</button>
+        <button type="button" class="view-btn" data-target="charts"><i class="bi bi-graph-up-arrow"></i> กราฟ</button>
+      </nav>
+
+      <section class="hero-grid view-section" data-view="live">
         <section class="panel connection-widget conn-checking" id="deviceConnectionCard">
           <div class="connection-head">
             <h2><i class="bi bi-router-fill" aria-hidden="true"></i> Device Connection</h2>
@@ -46,7 +57,7 @@
         </section>
       </section>
 
-      <section class="panel grouped-panel air-group">
+      <section class="panel grouped-panel air-group view-section" data-view="live">
         <h2 class="group-title"><i class="bi bi-cloud-sun-fill" aria-hidden="true"></i> สภาพแวดล้อมอากาศ (Air Environment)</h2>
         <div class="kpi-grid">
           <article class="kpi"><h3><i class="bi bi-thermometer-half" aria-hidden="true"></i> Air Temp</h3><p id="air_temp">-</p><small>C</small></article>
@@ -58,7 +69,7 @@
         </div>
       </section>
 
-      <section class="panel grouped-panel soil-group">
+      <section class="panel grouped-panel soil-group view-section" data-view="live">
         <h2 class="group-title"><i class="bi bi-moisture" aria-hidden="true"></i> สภาพแวดล้อมดิน (Soil Environment)</h2>
         <div class="kpi-grid">
           <article class="kpi"><h3><i class="bi bi-thermometer-half" aria-hidden="true"></i> Soil Temp</h3><p id="soil_temp">-</p><small>C</small></article>
@@ -68,7 +79,7 @@
         </div>
       </section>
 
-      <section class="panel chart-grid">
+      <section class="panel chart-grid view-section" data-view="charts">
         <div class="chart-card">
           <h3><i class="bi bi-graph-up-arrow" aria-hidden="true"></i> VPD Last 24h</h3>
           <canvas id="vpdChart"></canvas>
@@ -79,7 +90,7 @@
         </div>
       </section>
 
-      <section class="panel chart-grid">
+      <section class="panel chart-grid view-section" data-view="charts">
         <div class="chart-card">
           <h3><i class="bi bi-cloud-drizzle" aria-hidden="true"></i> แนวโน้มอุณหภูมิและความชื้นอากาศ (24h)</h3>
           <canvas id="airTrendChart"></canvas>
@@ -91,7 +102,7 @@
       </section>
 
       <!-- Weather Forecast Section -->
-      <section class="panel weather-panel">
+      <section class="panel weather-panel view-section" data-view="weather">
         <div class="weather-header">
           <h2 class="group-title"><i class="bi bi-cloud-sun-fill" aria-hidden="true"></i> พยากรณ์อากาศ 7 วัน</h2>
           <div class="weather-search-wrap weather-form-wrap">
@@ -135,6 +146,47 @@
 
     <script>
       const refreshSeconds = Number("{{ refresh_seconds }}");
+      const defaultDurationDays = Math.min(14, Math.max(1, Number(document.body.dataset.defaultForecastDays || "7")));
+      const defaultPlaceFromServer = {
+        province: (document.body.dataset.defaultProvince || "").trim(),
+        amphoe: (document.body.dataset.defaultAmphoe || "").trim(),
+        tambon: (document.body.dataset.defaultTambon || "").trim(),
+      };
+
+      const viewSwitchRoot = document.getElementById("viewSwitch");
+      const viewButtons = Array.from(document.querySelectorAll(".view-btn"));
+      const viewSections = Array.from(document.querySelectorAll(".view-section"));
+      const kioskMedia = window.matchMedia("(max-width: 900px), (max-height: 560px)");
+
+      function applyViewMode(targetView) {
+        const isKiosk = kioskMedia.matches;
+        if (viewSwitchRoot) {
+          viewSwitchRoot.classList.toggle("is-visible", isKiosk);
+        }
+
+        viewSections.forEach((section) => {
+          if (!isKiosk) {
+            section.classList.remove("hidden-by-view");
+            return;
+          }
+          const view = section.getAttribute("data-view");
+          section.classList.toggle("hidden-by-view", view !== targetView);
+        });
+
+        viewButtons.forEach((btn) => {
+          btn.classList.toggle("is-active", btn.dataset.target === targetView);
+        });
+      }
+
+      let currentView = "live";
+      viewButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          currentView = btn.dataset.target || "live";
+          applyViewMode(currentView);
+        });
+      });
+      kioskMedia.addEventListener("change", () => applyViewMode(currentView));
+      applyViewMode(currentView);
 
       function formatNumber(v, d = 2) {
         if (v === null || v === undefined || Number.isNaN(Number(v))) return "-";
@@ -613,8 +665,21 @@
         if (place.province) params.set("province", place.province);
         if (place.amphoe) params.set("amphoe", place.amphoe);
         if (place.tambon) params.set("tambon", place.tambon);
-        params.set("duration_days", "7");
+        params.set("duration_days", String(defaultDurationDays));
         return params.toString();
+      }
+
+      async function parseApiError(res) {
+        try {
+          const payload = await res.json();
+          const detail = payload?.detail;
+          if (typeof detail === "string" && detail.trim()) {
+            return detail.trim();
+          }
+        } catch {
+          // no-op
+        }
+        return `HTTP ${res.status}`;
       }
 
       function setSummaryClass(level) {
@@ -693,21 +758,33 @@
       async function loadWeatherAndSummary(place) {
         const container = document.getElementById("weatherForecast");
         container.innerHTML = '<p class="weather-empty">กำลังโหลดพยากรณ์อากาศจาก TMD...</p>';
+        const normalizedPlace = {
+          province: (place.province || "").trim(),
+          amphoe: (place.amphoe || "").trim(),
+          tambon: (place.tambon || "").trim(),
+        };
         try {
-          const queryString = buildPlaceQuery(place);
+          const queryString = buildPlaceQuery(normalizedPlace);
           const [weatherRes, summaryRes] = await Promise.all([
             fetch(`/api/weather?${queryString}`),
             fetch(`/api/farm-summary?${queryString}`),
           ]);
-          if (!weatherRes.ok || !summaryRes.ok) throw new Error("api error");
+          if (!weatherRes.ok) {
+            throw new Error(`โหลดข้อมูลอากาศไม่สำเร็จ: ${await parseApiError(weatherRes)}`);
+          }
+          if (!summaryRes.ok) {
+            throw new Error(`โหลดสรุปความเสี่ยงไม่สำเร็จ: ${await parseApiError(summaryRes)}`);
+          }
           const weatherData = await weatherRes.json();
           const summaryData = await summaryRes.json();
           renderWeatherCards(weatherData);
           renderFarmSummary(summaryData.summary);
-          setLocationBadge(place, weatherData.location);
-          localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(place));
-        } catch {
-          container.innerHTML = '<p class="weather-empty weather-error"><i class="bi bi-exclamation-triangle-fill"></i> โหลดพยากรณ์อากาศจาก TMD ไม่สำเร็จ</p>';
+          setLocationBadge(normalizedPlace, weatherData.location);
+          localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(normalizedPlace));
+        } catch (err) {
+          document.getElementById("weatherLocationName").classList.add("hidden");
+          const msg = (err instanceof Error && err.message) ? err.message : "โหลดพยากรณ์อากาศจาก TMD ไม่สำเร็จ";
+          container.innerHTML = `<p class="weather-empty weather-error"><i class="bi bi-exclamation-triangle-fill"></i> ${msg}</p>`;
         }
       }
 
@@ -722,6 +799,15 @@
         loadWeatherAndSummary({ province, amphoe, tambon });
       });
 
+      ["weatherProvinceInput", "weatherAmphoeInput", "weatherTambonInput"].forEach((id) => {
+        const input = document.getElementById(id);
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key !== "Enter") return;
+          ev.preventDefault();
+          document.getElementById("weatherLoadBtn").click();
+        });
+      });
+
       // Restore saved location on load
       try {
         const saved = localStorage.getItem(WEATHER_LOC_KEY);
@@ -733,6 +819,11 @@
           if (place.province) {
             loadWeatherAndSummary(place);
           }
+        } else if (defaultPlaceFromServer.province) {
+          document.getElementById("weatherProvinceInput").value = defaultPlaceFromServer.province;
+          document.getElementById("weatherAmphoeInput").value = defaultPlaceFromServer.amphoe;
+          document.getElementById("weatherTambonInput").value = defaultPlaceFromServer.tambon;
+          loadWeatherAndSummary(defaultPlaceFromServer);
         }
       } catch { /* ignore */ }
     </script>

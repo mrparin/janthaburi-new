@@ -166,6 +166,10 @@ async def index(request: Request) -> HTMLResponse:
             "request": request,
             "refresh_seconds": settings.refresh_seconds,
             "topic": settings.mqtt_topic,
+            "tmd_province": settings.tmd_province,
+            "tmd_amphoe": settings.tmd_amphoe,
+            "tmd_tambon": settings.tmd_tambon,
+            "tmd_forecast_days": settings.tmd_forecast_days,
         },
     )
 

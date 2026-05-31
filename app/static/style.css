@@ -130,6 +130,38 @@ h1 {
   padding: clamp(1rem, 2.4vw, 2rem);
 }
 
+.view-switch {
+  display: none;
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.view-btn {
+  align-items: center;
+  background: #f3ead2;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.92rem;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.45rem 0.55rem;
+}
+
+.view-btn.is-active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.hidden-by-view {
+  display: none !important;
+}
+
 .panel,
 .connection-widget,
 .status-card,
@@ -890,6 +922,147 @@ h1 {
 
   .weather-load-btn {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+  .topbar {
+    min-height: 108px;
+    padding: 0.8rem;
+    position: static;
+  }
+
+  .topbar-copy {
+    max-width: none;
+  }
+
+  .eyebrow {
+    font-size: 0.65rem;
+  }
+
+  h1 {
+    font-size: 1.28rem;
+  }
+
+  .sub {
+    font-size: 0.78rem;
+  }
+
+  .badge {
+    font-size: 0.76rem;
+    padding: 0.42rem 0.62rem;
+  }
+
+  .layout {
+    gap: 0.65rem;
+    padding: 0.65rem;
+  }
+
+  .view-switch.is-visible {
+    display: grid;
+  }
+
+  .hero-grid,
+  .status-grid,
+  .chart-grid,
+  .weather-header {
+    gap: 0.65rem;
+    grid-template-columns: 1fr;
+  }
+
+  .grouped-panel,
+  .weather-panel,
+  .chart-card,
+  .status-card,
+  .connection-widget {
+    padding: 0.75rem;
+  }
+
+  .connection-widget,
+  .status-card {
+    min-height: 0;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi {
+    min-height: 94px;
+    padding: 0.6rem 0.64rem 0.58rem 0.74rem;
+  }
+
+  .kpi h3 {
+    font-size: 0.74rem;
+  }
+
+  .kpi p {
+    font-size: clamp(1.3rem, 4.7vw, 1.65rem);
+    margin-top: 0.35rem;
+  }
+
+  .kpi small {
+    font-size: 0.74rem;
+  }
+
+  .chart-card h3 {
+    font-size: 0.86rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .chart-card canvas {
+    height: 180px !important;
+  }
+
+  .weather-location-form {
+    gap: 0.45rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .weather-load-btn {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .weather-forecast-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .weather-day-card {
+    min-height: 128px;
+    padding: 0.62rem;
+  }
+
+  .weather-day-icon {
+    font-size: 1.45rem;
+    margin: 0.12rem 0;
+  }
+
+  .weather-day-desc,
+  .weather-day-rain,
+  .weather-day-wind {
+    font-size: 0.72rem;
+  }
+
+  .farm-summary-card {
+    padding: 0.78rem;
+  }
+
+  .farm-summary-list {
+    font-size: 0.84rem;
+  }
+
+  .footer {
+    margin-top: 0.7rem;
+    padding: 0.7rem;
+  }
+
+  .footer-line1 {
+    font-size: 0.82rem;
+  }
+
+  .footer-line2 {
+    font-size: 0.75rem;
   }
 }
 
