@@ -672,6 +672,51 @@
 
       const DAYS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"];
       const WEATHER_LOC_KEY = "weather_location_tmd_place";
+      const WEATHER_AUTO_REFRESH_MS = 15 * 60 * 1000;
+
+      let activeWeatherPlace = null;
+      let weatherAutoRefreshTimer = null;
+      let weatherMidnightRefreshTimer = null;
+      let weatherLoading = false;
+
+      function isSameLocalDate(a, b) {
+        return (
+          a.getFullYear() === b.getFullYear() &&
+          a.getMonth() === b.getMonth() &&
+          a.getDate() === b.getDate()
+        );
+      }
+
+      function msUntilNextLocalMidnight() {
+        const now = new Date();
+        const nextMidnight = new Date(now);
+        nextMidnight.setHours(24, 0, 2, 0);
+        return Math.max(1000, nextMidnight.getTime() - now.getTime());
+      }
+
+      async function refreshWeatherForActivePlace() {
+        if (!activeWeatherPlace || weatherLoading) return;
+        await loadWeatherAndSummary(activeWeatherPlace, { persist: false });
+      }
+
+      function setupWeatherAutoRefresh() {
+        if (weatherAutoRefreshTimer) {
+          clearInterval(weatherAutoRefreshTimer);
+        }
+        weatherAutoRefreshTimer = setInterval(() => {
+          refreshWeatherForActivePlace();
+        }, WEATHER_AUTO_REFRESH_MS);
+      }
+
+      function setupWeatherMidnightRefresh() {
+        if (weatherMidnightRefreshTimer) {
+          clearTimeout(weatherMidnightRefreshTimer);
+        }
+        weatherMidnightRefreshTimer = setTimeout(async () => {
+          await refreshWeatherForActivePlace();
+          setupWeatherMidnightRefresh();
+        }, msUntilNextLocalMidnight());
+      }
 
       function buildPlaceQuery(place) {
         const params = new URLSearchParams();
@@ -712,9 +757,9 @@
           return;
         }
         container.innerHTML = "";
-        days.forEach((forecast, i) => {
+        days.forEach((forecast) => {
           const d = new Date(forecast.time);
-          const dayLabel = i === 0 ? "วันนี้" : DAYS_TH[d.getDay()];
+          const dayLabel = isSameLocalDate(d, new Date()) ? "วันนี้" : DAYS_TH[d.getDay()];
           const cond = forecast.cond;
           const icon = TMD_COND_ICONS[cond] || "bi-cloud";
           const desc = TMD_COND_DESC[cond] || "ไม่ระบุ";
@@ -755,14 +800,21 @@
         badge.classList.remove("hidden");
       }
 
-      async function loadWeatherAndSummary(place) {
+      async function loadWeatherAndSummary(place, options = {}) {
         const container = document.getElementById("weatherForecast");
         container.innerHTML = '<p class="weather-empty">กำลังโหลดพยากรณ์อากาศจาก TMD...</p>';
+        weatherLoading = true;
+        const persist = options.persist !== false;
         try {
+          activeWeatherPlace = {
+            province: place.province || "",
+            amphoe: place.amphoe || "",
+            tambon: place.tambon || "",
+          };
           const queryString = buildPlaceQuery(place);
           const [weatherRes, summaryRes] = await Promise.all([
-            fetch(`/api/weather?${queryString}`),
-            fetch(`/api/farm-summary?${queryString}`),
+            fetch(`/api/weather?${queryString}`, { cache: "no-store" }),
+            fetch(`/api/farm-summary?${queryString}`, { cache: "no-store" }),
           ]);
           if (!weatherRes.ok || !summaryRes.ok) throw new Error("api error");
           const weatherData = await weatherRes.json();
@@ -770,9 +822,13 @@
           renderWeatherCards(weatherData);
           renderFarmSummary(summaryData.summary);
           setLocationBadge(place, weatherData.location);
-          localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(place));
+          if (persist) {
+            localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(activeWeatherPlace));
+          }
         } catch {
           container.innerHTML = '<p class="weather-empty weather-error"><i class="bi bi-exclamation-triangle-fill"></i> โหลดพยากรณ์อากาศจาก TMD ไม่สำเร็จ</p>';
+        } finally {
+          weatherLoading = false;
         }
       }
 
@@ -800,6 +856,15 @@
           }
         }
       } catch { /* ignore */ }
+
+      setupWeatherAutoRefresh();
+      setupWeatherMidnightRefresh();
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          refreshWeatherForActivePlace();
+        }
+      });
     </script>
   </body>
 </html>
