@@ -43,6 +43,12 @@ CREATE TABLE IF NOT EXISTS samples (
 );
 CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples(timestamp_ms);
 CREATE INDEX IF NOT EXISTS idx_samples_node_zone_ts ON samples(node, zone, timestamp_ms);
+
+CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
 """
 
 
@@ -197,3 +203,35 @@ class Database:
                     raise
                 rows = self._conn.execute(sql, (min_ts, limit)).fetchall()
         return [dict(r) for r in rows]
+
+    def get_state(self, key: str) -> str | None:
+        sql = "SELECT value FROM app_state WHERE key = ? LIMIT 1"
+        with self._lock:
+            try:
+                row = self._conn.execute(sql, (key,)).fetchone()
+            except sqlite3.DatabaseError as exc:
+                if not self._recover_if_malformed(exc):
+                    raise
+                row = self._conn.execute(sql, (key,)).fetchone()
+        if row is None:
+            return None
+        return str(row["value"])
+
+    def set_state(self, key: str, value: str) -> None:
+        sql = """
+        INSERT INTO app_state (key, value, updated_at_ms)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value=excluded.value,
+            updated_at_ms=excluded.updated_at_ms
+        """
+        now_ms = int(time.time() * 1000)
+        with self._lock:
+            try:
+                with self._conn:
+                    self._conn.execute(sql, (key, value, now_ms))
+            except sqlite3.DatabaseError as exc:
+                if not self._recover_if_malformed(exc):
+                    raise
+                with self._conn:
+                    self._conn.execute(sql, (key, value, now_ms))

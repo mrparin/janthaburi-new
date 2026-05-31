@@ -16,7 +16,12 @@
         <h1><i class="bi bi-tree-fill" aria-hidden="true"></i> สวนพรรณมณี</h1>
         <p class="sub">Realtime MQTT: {{ topic }}</p>
       </div>
-      <span id="updatedAt" class="badge">Waiting for data...</span>
+      <div class="topbar-actions">
+        <button id="lineAlertToggleBtn" class="line-alert-toggle line-alert-off" type="button" aria-pressed="false">
+          <i class="bi bi-bell-slash-fill" aria-hidden="true"></i> LINE Auto Alert: OFF
+        </button>
+        <span id="updatedAt" class="badge">Waiting for data...</span>
+      </div>
     </header>
 
     <main class="layout">
@@ -135,6 +140,66 @@
 
     <script>
       const refreshSeconds = Number("{{ refresh_seconds }}");
+
+      const lineAlertToggleBtn = document.getElementById("lineAlertToggleBtn");
+
+      function renderLineAlertStatus(status) {
+        if (!lineAlertToggleBtn || !status) return;
+        const enabled = Boolean(status.enabled);
+        const effectiveEnabled = Boolean(status.effective_enabled);
+        const configured = Boolean(status.notifier_configured) && Boolean(status.has_default_place);
+
+        lineAlertToggleBtn.classList.remove("line-alert-on", "line-alert-off", "line-alert-blocked");
+        lineAlertToggleBtn.classList.add(enabled ? "line-alert-on" : "line-alert-off");
+        lineAlertToggleBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
+
+        const iconClass = enabled ? "bi-bell-fill" : "bi-bell-slash-fill";
+        const text = enabled ? "LINE Auto Alert: ON" : "LINE Auto Alert: OFF";
+        lineAlertToggleBtn.innerHTML = `<i class="bi ${iconClass}" aria-hidden="true"></i> ${text}`;
+
+        if (!configured) {
+          lineAlertToggleBtn.classList.add("line-alert-blocked");
+          lineAlertToggleBtn.title = "ยังไม่พร้อมใช้งาน: กรุณาตั้งค่า LINE token/user และ TMD_PROVINCE";
+        } else if (!effectiveEnabled && enabled) {
+          lineAlertToggleBtn.classList.add("line-alert-blocked");
+          lineAlertToggleBtn.title = "เปิดไว้ แต่ยังส่งอัตโนมัติไม่ได้จากเงื่อนไขระบบ";
+        } else {
+          lineAlertToggleBtn.title = "กดเพื่อสลับเปิด/ปิดการแจ้งเตือน LINE อัตโนมัติ";
+        }
+      }
+
+      async function refreshLineAlertStatus() {
+        try {
+          const res = await fetch("/api/line/alert-status", { cache: "no-store" });
+          if (!res.ok) return;
+          const status = await res.json();
+          renderLineAlertStatus(status);
+        } catch (err) {
+          console.warn("Failed to load LINE alert status:", err);
+        }
+      }
+
+      async function toggleLineAlert() {
+        if (!lineAlertToggleBtn) return;
+        lineAlertToggleBtn.disabled = true;
+        try {
+          const res = await fetch("/api/line/alert-toggle", { method: "POST" });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(payload.detail || "toggle failed");
+          }
+          renderLineAlertStatus(payload);
+        } catch (err) {
+          console.warn("Failed to toggle LINE alert:", err);
+        } finally {
+          lineAlertToggleBtn.disabled = false;
+        }
+      }
+
+      if (lineAlertToggleBtn) {
+        lineAlertToggleBtn.addEventListener("click", toggleLineAlert);
+      }
+      refreshLineAlertStatus();
 
       function formatNumber(v, d = 2) {
         if (v === null || v === undefined || Number.isNaN(Number(v))) return "-";

@@ -32,6 +32,117 @@ line_notifier = LineNotifier(settings.line_channel_access_token, settings.line_u
 
 _last_line_alert_sent_at: dt.datetime | None = None
 _last_line_alert_fingerprint: str | None = None
+_line_alert_runtime_enabled: bool = settings.line_alert_enabled
+_last_risk_level: str | None = None
+_last_danger_started_at: dt.datetime | None = None
+_last_danger_reminder_at: dt.datetime | None = None
+_daily_alert_date: dt.date | None = None
+_daily_alert_count: int = 0
+
+_MAX_ALERTS_PER_DAY = 8
+_DANGER_REMINDER_EVERY = dt.timedelta(hours=2)
+_LINE_ALERT_STATE_KEY = "line_alert_runtime_enabled"
+
+
+def _risk_severity(level: str | None) -> int:
+    if level == "danger":
+        return 2
+    if level == "warning":
+        return 1
+    return 0
+
+
+def _line_alert_runtime_allowed() -> bool:
+    return _line_alert_runtime_enabled and line_notifier.enabled and bool(settings.tmd_province)
+
+
+def _rollover_daily_counter(now: dt.datetime) -> None:
+    global _daily_alert_date
+    global _daily_alert_count
+
+    today = now.date()
+    if _daily_alert_date != today:
+        _daily_alert_date = today
+        _daily_alert_count = 0
+
+
+def _line_alert_status_payload() -> dict[str, object]:
+    persisted = db.get_state(_LINE_ALERT_STATE_KEY)
+    return {
+        "enabled": _line_alert_runtime_enabled,
+        "effective_enabled": _line_alert_runtime_allowed(),
+        "configured_in_env": settings.line_alert_enabled,
+        "persisted": persisted,
+        "notifier_configured": line_notifier.enabled,
+        "has_default_place": bool(settings.tmd_province),
+        "daily_limit": _MAX_ALERTS_PER_DAY,
+        "daily_sent": _daily_alert_count,
+    }
+
+
+def _load_line_alert_runtime_enabled() -> None:
+    global _line_alert_runtime_enabled
+
+    persisted = db.get_state(_LINE_ALERT_STATE_KEY)
+    if persisted is None:
+        _line_alert_runtime_enabled = settings.line_alert_enabled
+        return
+
+    value = persisted.strip().lower()
+    _line_alert_runtime_enabled = value in {"1", "true", "yes", "on"}
+
+
+def _reset_line_alert_state() -> None:
+    global _last_line_alert_sent_at
+    global _last_line_alert_fingerprint
+    global _last_risk_level
+    global _last_danger_started_at
+    global _last_danger_reminder_at
+
+    _last_line_alert_sent_at = None
+    _last_line_alert_fingerprint = None
+    _last_risk_level = None
+    _last_danger_started_at = None
+    _last_danger_reminder_at = None
+
+
+_load_line_alert_runtime_enabled()
+
+
+async def _send_line_event_alert(
+    *,
+    location_name: str,
+    summary: dict,
+    reason: str,
+    event_key: str,
+    now: dt.datetime,
+) -> bool:
+    global _last_line_alert_sent_at
+    global _last_line_alert_fingerprint
+    global _daily_alert_count
+
+    _rollover_daily_counter(now)
+    if _daily_alert_count >= _MAX_ALERTS_PER_DAY:
+        return False
+
+    cooldown = dt.timedelta(minutes=max(1, settings.line_alert_cooldown_minutes))
+    fingerprint = f"{event_key}|{summary.get('risk_level')}|{summary.get('headline')}"
+    if (
+        _last_line_alert_fingerprint == fingerprint
+        and _last_line_alert_sent_at is not None
+        and (now - _last_line_alert_sent_at) < cooldown
+    ):
+        return False
+
+    message = f"{format_line_alert(location_name, summary)}\n\nเหตุแจ้งเตือน: {reason}"
+    sent = await line_notifier.send_text(message)
+    if not sent:
+        return False
+
+    _last_line_alert_sent_at = now
+    _last_line_alert_fingerprint = fingerprint
+    _daily_alert_count += 1
+    return True
 
 
 def _choose_place(
@@ -90,12 +201,16 @@ async def periodic_cleanup(stop_event: asyncio.Event) -> None:
 
 
 async def periodic_line_alert(stop_event: asyncio.Event) -> None:
-    global _last_line_alert_sent_at
-    global _last_line_alert_fingerprint
+    global _last_risk_level
+    global _last_danger_started_at
+    global _last_danger_reminder_at
 
     while not stop_event.is_set():
         try:
-            if settings.line_alert_enabled and line_notifier.enabled and settings.tmd_province:
+            now = dt.datetime.now(dt.timezone.utc)
+            _rollover_daily_counter(now)
+
+            if _line_alert_runtime_allowed():
                 payload = await _build_weather_and_summary(
                     PlaceQuery(
                         province=settings.tmd_province,
@@ -105,25 +220,59 @@ async def periodic_line_alert(stop_event: asyncio.Event) -> None:
                     duration_days=3,
                 )
                 summary = payload["summary"]
-                risk_level = summary.get("risk_level")
-                forecast_3d = summary.get("snapshot", {}).get("forecast_3d", {})
-                rain_sum = forecast_3d.get("rain_sum")
-                vpd_kpa = summary.get("snapshot", {}).get("vpd_kpa")
-                fingerprint = f"{risk_level}|{summary.get('headline')}|{rain_sum}|{vpd_kpa}"
+                risk_level = str(summary.get("risk_level") or "normal")
+                location_name = _format_location_name(payload.get("weather", {}).get("location"))
 
-                cooldown = dt.timedelta(minutes=max(1, settings.line_alert_cooldown_minutes))
-                now = dt.datetime.now(dt.timezone.utc)
-                cooldown_ok = _last_line_alert_sent_at is None or (now - _last_line_alert_sent_at) >= cooldown
-                changed = _last_line_alert_fingerprint != fingerprint
+                if risk_level == "danger":
+                    if _last_danger_started_at is None:
+                        _last_danger_started_at = now
+                else:
+                    _last_danger_started_at = None
+                    _last_danger_reminder_at = None
 
-                if risk_level in {"warning", "danger"} and (cooldown_ok or changed):
-                    location_name = _format_location_name(payload.get("weather", {}).get("location"))
-                    message = format_line_alert(location_name, summary)
-                    sent = await line_notifier.send_text(message)
+                event_reason: str | None = None
+                event_key: str | None = None
+
+                prev_level = _last_risk_level
+                if prev_level is None and risk_level in {"warning", "danger"}:
+                    event_reason = "เริ่มเข้าโหมดเฝ้าระวัง"
+                    event_key = "bootstrap_risk"
+                elif prev_level is not None and _risk_severity(risk_level) > _risk_severity(prev_level):
+                    if risk_level == "danger":
+                        event_reason = "ระดับความเสี่ยงเพิ่มขึ้นเป็นอันตราย"
+                        event_key = "risk_up_danger"
+                    else:
+                        event_reason = "ระดับความเสี่ยงเพิ่มขึ้นเป็นเฝ้าระวัง"
+                        event_key = "risk_up_warning"
+                elif prev_level in {"warning", "danger"} and risk_level == "normal":
+                    event_reason = "ความเสี่ยงกลับสู่ระดับปกติ"
+                    event_key = "risk_recovered"
+                elif (
+                    risk_level == "danger"
+                    and _last_danger_started_at is not None
+                    and (now - _last_danger_started_at) >= _DANGER_REMINDER_EVERY
+                    and (
+                        _last_danger_reminder_at is None
+                        or (now - _last_danger_reminder_at) >= _DANGER_REMINDER_EVERY
+                    )
+                ):
+                    event_reason = "อยู่ในระดับอันตรายต่อเนื่องเกิน 2 ชั่วโมง"
+                    event_key = "danger_persistent"
+
+                if event_reason and event_key:
+                    sent = await _send_line_event_alert(
+                        location_name=location_name,
+                        summary=summary,
+                        reason=event_reason,
+                        event_key=event_key,
+                        now=now,
+                    )
                     if sent:
-                        _last_line_alert_sent_at = now
-                        _last_line_alert_fingerprint = fingerprint
-                        logger.info("Sent LINE alert: %s", fingerprint)
+                        if event_key == "danger_persistent":
+                            _last_danger_reminder_at = now
+                        logger.info("Sent LINE alert event: %s", event_key)
+
+                _last_risk_level = risk_level
         except Exception as exc:  # pragma: no cover
             logger.exception("Periodic LINE alert failed: %s", exc)
 
@@ -248,6 +397,30 @@ async def api_line_test_alert(
     message = format_line_alert(location_name, payload["summary"])
     sent = await line_notifier.send_text(message)
     return JSONResponse(content={"ok": sent, "location": location_name})
+
+
+@app.get("/api/line/alert-status")
+async def api_line_alert_status() -> JSONResponse:
+    now = dt.datetime.now(dt.timezone.utc)
+    _rollover_daily_counter(now)
+    return JSONResponse(content=_line_alert_status_payload())
+
+
+@app.post("/api/line/alert-toggle")
+async def api_line_alert_toggle(enabled: bool | None = Query(None)) -> JSONResponse:
+    global _line_alert_runtime_enabled
+
+    if enabled is None:
+        _line_alert_runtime_enabled = not _line_alert_runtime_enabled
+    else:
+        _line_alert_runtime_enabled = bool(enabled)
+
+    if not _line_alert_runtime_enabled:
+        _reset_line_alert_state()
+
+    db.set_state(_LINE_ALERT_STATE_KEY, "1" if _line_alert_runtime_enabled else "0")
+
+    return JSONResponse(content=_line_alert_status_payload())
 
 
 @app.websocket("/ws")
