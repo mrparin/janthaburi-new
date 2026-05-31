@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Durian Dashboard</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-copy">
+        <span class="eyebrow">Durian IoT Operations</span>
+        <h1><i class="bi bi-tree-fill" aria-hidden="true"></i> สวนพรรณมณี</h1>
+        <p class="sub">Realtime MQTT: {{ topic }}</p>
+      </div>
+      <span id="updatedAt" class="badge">Waiting for data...</span>
+    </header>
+
+    <main class="layout">
+      <section class="hero-grid">
+        <section class="panel connection-widget conn-checking" id="deviceConnectionCard">
+          <div class="connection-head">
+            <h2><i class="bi bi-router-fill" aria-hidden="true"></i> Device Connection</h2>
+            <span class="connection-dot" id="deviceConnectionDot" aria-hidden="true"></span>
+          </div>
+          <p class="connection-state" id="deviceConnectionState">Checking...</p>
+          <p class="connection-meta" id="deviceConnectionMeta">รอข้อมูลจากอุปกรณ์</p>
+        </section>
+
+        <section class="status-grid">
+          <article class="status-card" id="vpdCard">
+            <h3><i class="bi bi-heart-pulse" aria-hidden="true"></i> VPD Status</h3>
+            <p class="level" id="vpd_status">-</p>
+            <p id="vpd_message">-</p>
+            <p class="action" id="vpd_action">-</p>
+          </article>
+          <article class="status-card" id="phCard">
+            <h3><i class="bi bi-bezier2" aria-hidden="true"></i> pH Status</h3>
+            <p class="level" id="ph_status">-</p>
+            <p id="ph_message">-</p>
+            <p class="action" id="ph_action">-</p>
+          </article>
+        </section>
+      </section>
+
+      <section class="panel grouped-panel air-group">
+        <h2 class="group-title"><i class="bi bi-cloud-sun-fill" aria-hidden="true"></i> สภาพแวดล้อมอากาศ (Air Environment)</h2>
+        <div class="kpi-grid">
+          <article class="kpi"><h3><i class="bi bi-thermometer-half" aria-hidden="true"></i> Air Temp</h3><p id="air_temp">-</p><small>C</small></article>
+          <article class="kpi"><h3><i class="bi bi-droplet-half" aria-hidden="true"></i> Air Humidity</h3><p id="air_humi">-</p><small>%RH</small></article>
+          <article class="kpi"><h3><i class="bi bi-speedometer2" aria-hidden="true"></i> VPD</h3><p id="vpd_kpa">-</p><small>kPa</small></article>
+          <article class="kpi"><h3><i class="bi bi-wind" aria-hidden="true"></i> Wind Speed</h3><p id="wind_speed_avg5m">-</p><small>m/s</small></article>
+          <article class="kpi"><h3><i class="bi bi-brightness-high" aria-hidden="true"></i> Solar Energy</h3><p id="solar_wm2_est">-</p><small>W/m2</small></article>
+          <article class="kpi"><h3><i class="bi bi-sun" aria-hidden="true"></i> Light Intensity</h3><p id="lux">-</p><small>lux</small></article>
+        </div>
+      </section>
+
+      <section class="panel grouped-panel soil-group">
+        <h2 class="group-title"><i class="bi bi-moisture" aria-hidden="true"></i> สภาพแวดล้อมดิน (Soil Environment)</h2>
+        <div class="kpi-grid">
+          <article class="kpi"><h3><i class="bi bi-thermometer-half" aria-hidden="true"></i> Soil Temp</h3><p id="soil_temp">-</p><small>C</small></article>
+          <article class="kpi"><h3><i class="bi bi-water" aria-hidden="true"></i> Soil Moisture</h3><p id="soil_humi">-</p><small>%</small></article>
+          <article class="kpi"><h3><i class="bi bi-activity" aria-hidden="true"></i> Soil pH</h3><p id="ph">-</p><small>pH</small></article>
+          <article class="kpi"><h3><i class="bi bi-lightning-charge" aria-hidden="true"></i> EC</h3><p id="ec">-</p><small>mS/cm</small></article>
+        </div>
+      </section>
+
+      <section class="panel chart-grid">
+        <div class="chart-card">
+          <h3><i class="bi bi-graph-up-arrow" aria-hidden="true"></i> VPD Last 24h</h3>
+          <canvas id="vpdChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3><i class="bi bi-graph-up" aria-hidden="true"></i> pH Last 7d</h3>
+          <canvas id="phChart"></canvas>
+        </div>
+      </section>
+
+      <section class="panel chart-grid">
+        <div class="chart-card">
+          <h3><i class="bi bi-cloud-drizzle" aria-hidden="true"></i> แนวโน้มอุณหภูมิและความชื้นอากาศ (24h)</h3>
+          <canvas id="airTrendChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3><i class="bi bi-flower1" aria-hidden="true"></i> แนวโน้มอุณหภูมิและความชื้นดิน (24h)</h3>
+          <canvas id="soilTrendChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Weather Forecast Section -->
+      <section class="panel weather-panel">
+        <div class="weather-header">
+          <h2 class="group-title"><i class="bi bi-cloud-sun-fill" aria-hidden="true"></i> พยากรณ์อากาศ 7 วัน</h2>
+          <div class="weather-search-wrap weather-form-wrap">
+            <div class="weather-location-form">
+              <label class="weather-field-label">
+                <span class="weather-field-name">ตำบล</span>
+                <input type="text" id="weatherTambonInput" class="weather-search-input" placeholder="เช่น วังโตนด" autocomplete="off" />
+              </label>
+              <label class="weather-field-label">
+                <span class="weather-field-name">อำเภอ</span>
+                <input type="text" id="weatherAmphoeInput" class="weather-search-input" placeholder="เช่น นายายอาม" autocomplete="off" />
+              </label>
+              <label class="weather-field-label">
+                <span class="weather-field-name">จังหวัด <span class="weather-field-required">*</span></span>
+                <input type="text" id="weatherProvinceInput" class="weather-search-input" placeholder="เช่น จันทบุรี" autocomplete="off" />
+              </label>
+              <button id="weatherLoadBtn" class="weather-load-btn" type="button"><i class="bi bi-cloud-download"></i> โหลด</button>
+            </div>
+          </div>
+          <span id="weatherLocationName" class="weather-location-badge hidden"></span>
+        </div>
+            <div class="weather-forecast-section">
+              <h3 class="weather-forecast-title"><i class="bi bi-calendar3-week" aria-hidden="true"></i> พยากรณ์อากาศ 7 วัน</h3>
+              <div id="weatherForecast" class="weather-forecast-grid">
+                <p class="weather-empty">กรุณาระบุจังหวัด/อำเภอ/ตำบล เพื่อดูพยากรณ์อากาศจาก TMD</p>
+              </div>
+            </div>
+        <div id="farmSummaryCard" class="farm-summary-card summary-normal">
+          <h3><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> สรุปข้อมูลสวน + พยากรณ์</h3>
+          <p id="farmSummaryHeadline">รอการเลือกพื้นที่เพื่อสรุปข้อมูล</p>
+          <p id="farmSummaryReasons" class="farm-summary-list">-</p>
+          <p id="farmSummaryActions" class="farm-summary-list">-</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p class="footer-line1">คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยเทคโนโลยีราชมงคลธัญบุรี</p>
+      <p class="footer-line2">สาขาวิชาการวิเคราะห์และจัดการข้อมูลขนาดใหญ่</p>
+    </footer>
+
+    <script>
+      const refreshSeconds = Number("{{ refresh_seconds }}");
+
+      function formatNumber(v, d = 2) {
+        if (v === null || v === undefined || Number.isNaN(Number(v))) return "-";
+        return Number(v).toFixed(d);
+      }
+
+      function applyStatusClass(el, level) {
+        el.className = "status-card";
+        if (!level) return;
+        el.classList.add(`status-${level}`);
+      }
+
+      function updateLatest(data) {
+        if (!data) return;
+        document.getElementById("air_temp").textContent = formatNumber(data.air_temp, 1);
+        document.getElementById("air_humi").textContent = formatNumber(data.air_humi, 1);
+        document.getElementById("vpd_kpa").textContent = formatNumber(data.vpd_kpa, 2);
+        document.getElementById("wind_speed_avg5m").textContent = formatNumber(data.wind_speed_avg5m, 2);
+        document.getElementById("solar_wm2_est").textContent = formatNumber(data.solar_wm2_est, 1);
+        document.getElementById("lux").textContent = formatNumber(data.lux, 0);
+
+        document.getElementById("soil_temp").textContent = formatNumber(data.soil_temp, 1);
+        document.getElementById("ph").textContent = formatNumber(data.ph, 2);
+        document.getElementById("soil_humi").textContent = formatNumber(data.soil_humi, 1);
+        document.getElementById("ec").textContent = formatNumber(data.ec, 2);
+
+        document.getElementById("vpd_status").textContent = data.vpd_status || "-";
+        document.getElementById("vpd_message").textContent = data.vpd_message || "-";
+        document.getElementById("vpd_action").textContent = data.vpd_action || "-";
+
+        document.getElementById("ph_status").textContent = data.ph_status || "-";
+        document.getElementById("ph_message").textContent = data.ph_message || "-";
+        document.getElementById("ph_action").textContent = data.ph_action || "-";
+
+        applyStatusClass(document.getElementById("vpdCard"), data.vpd_status);
+        applyStatusClass(document.getElementById("phCard"), data.ph_status);
+
+        if (data.timestamp_ms) {
+          const timestampMs = Number(data.timestamp_ms);
+          if (Number.isFinite(timestampMs)) {
+            lastDeviceSampleTs = timestampMs;
+            updateDeviceConnectionWidget();
+          }
+          document.getElementById("updatedAt").textContent = "Updated: " + new Date(data.timestamp_ms).toLocaleString();
+        }
+      }
+
+      async function loadHistory(field, hours, chart) {
+        const res = await fetch(`/api/history?field=${field}&hours=${hours}`);
+        const json = await res.json();
+        const labels = json.points.map((p) => new Date(p.timestamp_ms).toLocaleTimeString());
+        const values = json.points.map((p) => p.value);
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = values;
+        chart.update();
+      }
+
+
+      const axisLabelColor = "#5c6f73";
+      const axisTickColor = "#5c6f73";
+      const chartGridColor = "rgba(92, 111, 115, 0.16)";
+
+      // Improve tooltip reliability on dense/small points.
+      Chart.defaults.color = axisTickColor;
+      Chart.defaults.borderColor = chartGridColor;
+      Chart.defaults.interaction = { mode: "nearest", intersect: false, axis: "x" };
+      Chart.defaults.elements.point.radius = 2;
+      Chart.defaults.elements.point.hoverRadius = 6;
+      Chart.defaults.elements.point.hitRadius = 12;
+
+      const vpdChart = new Chart(document.getElementById("vpdChart"), {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "VPD kPa", data: [], tension: 0.25, borderColor: "#c47b16", backgroundColor: "#c47b16" }] },
+        options: {
+          animation: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              ticks: { color: axisTickColor },
+              title: { color: axisLabelColor },
+              grid: { color: chartGridColor }
+            },
+            y: {
+              ticks: { color: axisTickColor },
+              title: { color: axisLabelColor },
+              grid: { color: chartGridColor }
+            }
+          }
+        },
+      });
+
+      const phChart = new Chart(document.getElementById("phChart"), {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "pH", data: [], tension: 0.25, borderColor: "#be2730", backgroundColor: "#be2730" }] },
+        options: {
+          animation: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              ticks: { color: axisTickColor },
+              title: { color: axisLabelColor },
+              grid: { color: chartGridColor }
+            },
+            y: {
+              ticks: { color: axisTickColor },
+              title: { color: axisLabelColor },
+              grid: { color: chartGridColor }
+            }
+          }
+        },
+      });
+
+      async function refreshCharts() {
+        await loadHistory("vpd_kpa", 24, vpdChart);
+        await loadHistory("ph", 168, phChart);
+      }
+
+      let ws = null;
+      let wsReconnectTimer = null;
+      let wsBackoffMs = 1000;
+      let lastWsMessageAt = 0;
+      let wsConnectingStart = 0;
+      let lastDeviceSampleTs = null;
+
+      const deviceOfflineThresholdMs = Math.max(30000, refreshSeconds * 10000);
+
+      function setDeviceConnectionState(state, message) {
+        const card = document.getElementById("deviceConnectionCard");
+        const stateEl = document.getElementById("deviceConnectionState");
+        const metaEl = document.getElementById("deviceConnectionMeta");
+
+        if (!card || !stateEl || !metaEl) return;
+
+        card.classList.remove("conn-online", "conn-offline", "conn-checking");
+        card.classList.add(`conn-${state}`);
+
+        if (state === "online") {
+          stateEl.textContent = "Online";
+        } else if (state === "offline") {
+          stateEl.textContent = "Offline";
+        } else {
+          stateEl.textContent = "Checking...";
+        }
+
+        metaEl.textContent = message;
+      }
+
+      function formatElapsedThai(ageMs) {
+        const totalSec = Math.max(0, Math.round(ageMs / 1000));
+        const days = Math.floor(totalSec / 86400);
+        const hours = Math.floor((totalSec % 86400) / 3600);
+        const minutes = Math.floor((totalSec % 3600) / 60);
+        const seconds = totalSec % 60;
+
+        if (totalSec < 60) {
+          return `${seconds} วินาที`;
+        }
+
+        if (totalSec < 3600) {
+          if (seconds === 0) {
+            return `${Math.floor(totalSec / 60)} นาที`;
+          }
+          return `${Math.floor(totalSec / 60)} นาที ${seconds} วินาที`;
+        }
+
+        if (totalSec < 86400) {
+          if (minutes === 0) {
+            return `${Math.floor(totalSec / 3600)} ชั่วโมง`;
+          }
+          return `${Math.floor(totalSec / 3600)} ชั่วโมง ${minutes} นาที`;
+        }
+
+        if (hours === 0) {
+          return `${days} วัน`;
+        }
+
+        return `${days} วัน ${hours} ชั่วโมง`;
+      }
+
+      function updateDeviceConnectionWidget() {
+        const now = Date.now();
+
+        if (lastDeviceSampleTs === null) {
+          setDeviceConnectionState("checking", "รอข้อมูลจากอุปกรณ์");
+          return;
+        }
+
+        const ageMs = Math.max(0, now - lastDeviceSampleTs);
+        const elapsedText = formatElapsedThai(ageMs);
+
+        if (ageMs <= deviceOfflineThresholdMs) {
+          setDeviceConnectionState("online", `อัปเดตล่าสุด ${elapsedText} ที่แล้ว`);
+          return;
+        }
+
+        setDeviceConnectionState("offline", `ขาดข้อมูลมาแล้ว ${elapsedText}`);
+      }
+
+      function setTopBadgeStatus(text) {
+        const el = document.getElementById("updatedAt");
+        if (el) el.textContent = text;
+      }
+
+      async function fetchLatestSnapshot() {
+        try {
+          const res = await fetch("/api/latest", { cache: "no-store" });
+          if (!res.ok) return;
+          const json = await res.json();
+          updateLatest(json.data);
+        } catch (err) {
+          console.warn("Failed to fetch latest snapshot:", err);
+        }
+      }
+
+      function clearReconnectTimer() {
+        if (!wsReconnectTimer) return;
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = null;
+      }
+
+      function scheduleReconnect() {
+        clearReconnectTimer();
+        
+        if (navigator.onLine === false) {
+          setTopBadgeStatus("Offline - retrying connection...");
+        } else {
+          setTopBadgeStatus(`Reconnecting in ${(wsBackoffMs / 1000).toFixed(1)}s...`);
+        }
+        
+        wsReconnectTimer = setTimeout(connectWs, wsBackoffMs);
+        wsBackoffMs = Math.min(wsBackoffMs * 2, 10000);
+      }
+
+      function closeWs() {
+        if (!ws) return;
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        try {
+          ws.close();
+        } catch (e) {
+          // no-op
+        }
+        ws = null;
+      }
+
+      function connectWs() {
+        clearReconnectTimer();
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          return;
+        }
+
+        if (ws && ws.readyState === WebSocket.CONNECTING) {
+          if (Date.now() - wsConnectingStart > 10000) {
+            console.warn("WebSocket stuck in CONNECTING state, closing and retrying...");
+            closeWs();
+          } else {
+            return;
+          }
+        }
+
+        const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+        closeWs();
+        
+        wsConnectingStart = Date.now();
+        ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
+
+        ws.onopen = () => {
+          wsBackoffMs = 1000;
+          lastWsMessageAt = Date.now();
+          setTopBadgeStatus("Connected - Loading data...");
+          
+          fetchLatestSnapshot();
+          refreshCharts();
+          refreshTrendCharts();
+        };
+
+        ws.onmessage = (event) => {
+          lastWsMessageAt = Date.now();
+          try {
+            const payload = JSON.parse(event.data);
+            updateLatest(payload.data);
+          } catch (err) {
+            console.error("Failed to parse websocket message:", err);
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.warn("WebSocket error observed:", err);
+          closeWs();
+          scheduleReconnect();
+        };
+
+        ws.onclose = (event) => {
+          console.warn("WebSocket connection closed:", event);
+          ws = null;
+          scheduleReconnect();
+        };
+      }
+
+      window.addEventListener("offline", () => {
+        setTopBadgeStatus("Offline - waiting for network...");
+        closeWs();
+        updateDeviceConnectionWidget();
+      });
+
+      window.addEventListener("online", () => {
+        setTopBadgeStatus("Network restored - reconnecting...");
+        wsBackoffMs = 1000;
+        connectWs();
+        updateDeviceConnectionWidget();
+      });
+
+      setInterval(() => {
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+          connectWs();
+          return;
+        }
+        
+        if (ws.readyState === WebSocket.CONNECTING) {
+          if (Date.now() - wsConnectingStart > 10000) {
+            closeWs();
+            connectWs();
+          }
+          return;
+        }
+
+        const staleMs = Math.max(15000, refreshSeconds * 4000);
+        if (ws.readyState === WebSocket.OPEN && Date.now() - lastWsMessageAt > staleMs) {
+          console.warn("WebSocket connection stale, closing and reconnecting...");
+          closeWs();
+          connectWs();
+        }
+      }, 10000);
+
+      connectWs();
+        updateDeviceConnectionWidget();
+        setInterval(updateDeviceConnectionWidget, 3000);
+      refreshCharts();
+      setInterval(refreshCharts, Math.max(30, refreshSeconds * 10) * 1000);
+
+
+      const airTrendChart = new Chart(document.getElementById("airTrendChart"), {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            { label: "อุณหภูมิอากาศ (°C)", data: [], borderColor: "#146a9f", backgroundColor: "#146a9f", tension: 0.25, yAxisID: "yTemp" },
+            { label: "ความชื้นอากาศ (%RH)", data: [], borderColor: "#1f9bbd", backgroundColor: "#1f9bbd", tension: 0.25, yAxisID: "yHumi" },
+          ],
+        },
+        options: {
+          animation: false,
+          plugins: { legend: { display: true } },
+          scales: {
+            yTemp: {
+              type: "linear",
+              position: "left",
+              title: { display: true, text: "อุณหภูมิ (°C)", color: axisLabelColor },
+              ticks: { color: axisTickColor },
+              grid: { color: chartGridColor }
+            },
+            yHumi: {
+              type: "linear",
+              position: "right",
+              title: { display: true, text: "ความชื้น (%RH)", color: axisLabelColor },
+              ticks: { color: axisTickColor },
+              grid: { drawOnChartArea: false, color: chartGridColor }
+            },
+            x: {
+              ticks: { color: axisTickColor },
+              title: { color: axisLabelColor },
+              grid: { color: chartGridColor }
+            }
+          },
+        },
+      });
+
+
+      const soilTrendChart = new Chart(document.getElementById("soilTrendChart"), {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            { label: "อุณหภูมิดิน (°C)", data: [], borderColor: "#7d5532", backgroundColor: "#7d5532", tension: 0.25, yAxisID: "yTemp" },
+            { label: "ความชื้นดิน (%)", data: [], borderColor: "#186b4e", backgroundColor: "#186b4e", tension: 0.25, yAxisID: "yHumi" },
+          ],
+        },
+        options: {
+          animation: false,
+          plugins: { legend: { display: true } },
+          scales: {
+            yTemp: {
+              type: "linear",
+              position: "left",
+              title: { display: true, text: "อุณหภูมิ (°C)", color: axisLabelColor },
+              ticks: { color: axisTickColor },
+              grid: { color: chartGridColor }
+            },
+            yHumi: {
+              type: "linear",
+              position: "right",
+              title: { display: true, text: "ความชื้น (%)", color: axisLabelColor },
+              ticks: { color: axisTickColor },
+              grid: { drawOnChartArea: false, color: chartGridColor }
+            },
+            x: {
+              ticks: { color: axisTickColor },
+              title: { color: axisLabelColor },
+              grid: { color: chartGridColor }
+            }
+          },
+        },
+      });
+
+      async function fetchHistoryPoints(field, hours) {
+        const res = await fetch(`/api/history?field=${field}&hours=${hours}`);
+        const json = await res.json();
+        return json.points || [];
+      }
+
+      function mergeSeriesByTimestamp(seriesA, seriesB) {
+        const mapA = new Map(seriesA.map((p) => [p.timestamp_ms, p.value]));
+        const mapB = new Map(seriesB.map((p) => [p.timestamp_ms, p.value]));
+        const timestamps = Array.from(new Set([...mapA.keys(), ...mapB.keys()])).sort((a, b) => a - b);
+
+        return {
+          labels: timestamps.map((ts) => new Date(ts).toLocaleTimeString()),
+          aValues: timestamps.map((ts) => (mapA.has(ts) ? mapA.get(ts) : null)),
+          bValues: timestamps.map((ts) => (mapB.has(ts) ? mapB.get(ts) : null)),
+        };
+      }
+
+      async function refreshTrendCharts() {
+        const [airTemp, airHumi, soilTemp, soilHumi] = await Promise.all([
+          fetchHistoryPoints("air_temp", 24),
+          fetchHistoryPoints("air_humi", 24),
+          fetchHistoryPoints("soil_temp", 24),
+          fetchHistoryPoints("soil_humi", 24),
+        ]);
+
+        const airMerged = mergeSeriesByTimestamp(airTemp, airHumi);
+        airTrendChart.data.labels = airMerged.labels;
+        airTrendChart.data.datasets[0].data = airMerged.aValues;
+        airTrendChart.data.datasets[1].data = airMerged.bValues;
+        airTrendChart.update();
+
+        const soilMerged = mergeSeriesByTimestamp(soilTemp, soilHumi);
+        soilTrendChart.data.labels = soilMerged.labels;
+        soilTrendChart.data.datasets[0].data = soilMerged.aValues;
+        soilTrendChart.data.datasets[1].data = soilMerged.bValues;
+        soilTrendChart.update();
+      }
+
+      refreshTrendCharts();
+      setInterval(refreshTrendCharts, Math.max(60, refreshSeconds * 20) * 1000);
+
+      // ── Weather Forecast (TMD) ──────────────────────────────────────────────
+      const TMD_COND_ICONS = {
+        1: "bi-sun", 2: "bi-cloud-sun", 3: "bi-cloud", 4: "bi-clouds",
+        5: "bi-cloud-drizzle", 6: "bi-cloud-rain", 7: "bi-cloud-rain-heavy",
+        8: "bi-cloud-lightning-rain", 9: "bi-thermometer-snow",
+      };
+      const TMD_COND_DESC = {
+        1: "ท้องฟ้าแจ่มใส", 2: "มีเมฆบางส่วน", 3: "เมฆมาก", 4: "เมฆครึ้ม",
+        5: "ฝนเล็กน้อย", 6: "ฝนปานกลาง", 7: "ฝนหนัก", 8: "ฝนฟ้าคะนอง", 9: "อากาศหนาวจัด",
+      };
+
+      const DAYS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"];
+      const WEATHER_LOC_KEY = "weather_location_tmd_place";
+
+      function buildPlaceQuery(place) {
+        const params = new URLSearchParams();
+        if (place.province) params.set("province", place.province);
+        if (place.amphoe) params.set("amphoe", place.amphoe);
+        if (place.tambon) params.set("tambon", place.tambon);
+        params.set("duration_days", "7");
+        return params.toString();
+      }
+
+      function setSummaryClass(level) {
+        const card = document.getElementById("farmSummaryCard");
+        card.classList.remove("summary-normal", "summary-warning", "summary-danger");
+        if (level === "danger") {
+          card.classList.add("summary-danger");
+          return;
+        }
+        if (level === "warning") {
+          card.classList.add("summary-warning");
+          return;
+        }
+        card.classList.add("summary-normal");
+      }
+
+      function renderFarmSummary(summary) {
+        if (!summary) return;
+        document.getElementById("farmSummaryHeadline").textContent = summary.headline || "-";
+        document.getElementById("farmSummaryReasons").textContent = (summary.reasons || []).map((x) => `- ${x}`).join("\n") || "-";
+        document.getElementById("farmSummaryActions").textContent = (summary.actions || []).map((x) => `- ${x}`).join("\n") || "-";
+        setSummaryClass(summary.risk_level);
+      }
+
+      function renderWeatherCards(data) {
+        const days = data.days;
+        const container = document.getElementById("weatherForecast");
+        if (!Array.isArray(days) || days.length === 0) {
+          container.innerHTML = '<p class="weather-empty">ไม่มีข้อมูลพยากรณ์อากาศ</p>';
+          return;
+        }
+        container.innerHTML = "";
+        days.forEach((forecast, i) => {
+          const d = new Date(forecast.time);
+          const dayLabel = i === 0 ? "วันนี้" : DAYS_TH[d.getDay()];
+          const cond = forecast.cond;
+          const icon = TMD_COND_ICONS[cond] || "bi-cloud";
+          const desc = TMD_COND_DESC[cond] || "ไม่ระบุ";
+          let weatherClass = "weather-cond-cloud";
+          if ([1, 2].includes(cond)) weatherClass = "weather-cond-sun";
+          else if ([3, 6].includes(cond)) weatherClass = "weather-cond-cloud";
+          else if ([5, 8, 9].includes(cond)) weatherClass = "weather-cond-rain";
+          else if (cond === 7) weatherClass = "weather-cond-storm";
+          const tmax = forecast.tc_max != null ? Number(forecast.tc_max).toFixed(1) : "-";
+          const tmin = forecast.tc_min != null ? Number(forecast.tc_min).toFixed(1) : "-";
+          const rain = forecast.rain != null ? Number(forecast.rain).toFixed(1) : "-";
+          const rh = forecast.rh != null ? Number(forecast.rh).toFixed(0) : "-";
+          const wind = forecast.ws10m != null ? Number(forecast.ws10m).toFixed(1) : "-";
+          const card = document.createElement("div");
+          card.className = `weather-day-card ${weatherClass}`;
+          card.innerHTML = `
+            <div class="weather-day-label">${dayLabel}</div>
+            <div class="weather-day-date">${d.toLocaleDateString("th-TH", { day: "numeric", month: "short" })}</div>
+            <i class="bi ${icon} weather-day-icon" aria-hidden="true"></i>
+            <div class="weather-day-desc">${desc}</div>
+            <div class="weather-day-temp">
+              <span class="temp-max">${tmax}°</span>
+              <span class="temp-sep">/</span>
+              <span class="temp-min">${tmin}°</span>
+            </div>
+            <div class="weather-day-rain"><i class="bi bi-droplet-fill" aria-hidden="true"></i> RH ${rh}% · ฝน ${rain} มม.</div>
+            <div class="weather-day-wind"><i class="bi bi-wind" aria-hidden="true"></i> ${wind} m/s</div>
+          `;
+          container.appendChild(card);
+        });
+      }
+
+      function setLocationBadge(place, locationFromApi) {
+        const badge = document.getElementById("weatherLocationName");
+        const source = locationFromApi || {};
+        const items = [source.tambon || place.tambon, source.amphoe || place.amphoe, source.province || place.province].filter(Boolean);
+        badge.textContent = items.join(" ");
+        badge.classList.remove("hidden");
+      }
+
+      async function loadWeatherAndSummary(place) {
+        const container = document.getElementById("weatherForecast");
+        container.innerHTML = '<p class="weather-empty">กำลังโหลดพยากรณ์อากาศจาก TMD...</p>';
+        try {
+          const queryString = buildPlaceQuery(place);
+          const [weatherRes, summaryRes] = await Promise.all([
+            fetch(`/api/weather?${queryString}`),
+            fetch(`/api/farm-summary?${queryString}`),
+          ]);
+          if (!weatherRes.ok || !summaryRes.ok) throw new Error("api error");
+          const weatherData = await weatherRes.json();
+          const summaryData = await summaryRes.json();
+          renderWeatherCards(weatherData);
+          renderFarmSummary(summaryData.summary);
+          setLocationBadge(place, weatherData.location);
+          localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(place));
+        } catch {
+          container.innerHTML = '<p class="weather-empty weather-error"><i class="bi bi-exclamation-triangle-fill"></i> โหลดพยากรณ์อากาศจาก TMD ไม่สำเร็จ</p>';
+        }
+      }
+
+      document.getElementById("weatherLoadBtn").addEventListener("click", () => {
+        const province = document.getElementById("weatherProvinceInput").value.trim();
+        const amphoe = document.getElementById("weatherAmphoeInput").value.trim();
+        const tambon = document.getElementById("weatherTambonInput").value.trim();
+        if (!province) {
+          document.getElementById("weatherForecast").innerHTML = '<p class="weather-empty weather-error">กรุณาระบุจังหวัด</p>';
+          return;
+        }
+        loadWeatherAndSummary({ province, amphoe, tambon });
+      });
+
+      // Restore saved location on load
+      try {
+        const saved = localStorage.getItem(WEATHER_LOC_KEY);
+        if (saved) {
+          const place = JSON.parse(saved);
+          document.getElementById("weatherProvinceInput").value = place.province || "";
+          document.getElementById("weatherAmphoeInput").value = place.amphoe || "";
+          document.getElementById("weatherTambonInput").value = place.tambon || "";
+          if (place.province) {
+            loadWeatherAndSummary(place);
+          }
+        }
+      } catch { /* ignore */ }
+    </script>
+  </body>
+</html>

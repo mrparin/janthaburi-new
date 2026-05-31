@@ -1,0 +1,19 @@
+[Unit]
+Description=Set touchscreen backlight brightness at boot
+DefaultDependencies=no
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Brightness: 0 (ดับ) – 255 (สว่างเต็ม). ค่าเริ่มต้น 128 ≈ 50%.
+# แก้ค่า BRIGHTNESS ด้านล่างเพื่อปรับความสว่าง
+# หรือรัน: sudo systemctl edit set-backlight และ override Environment=BRIGHTNESS=<ค่า>
+Environment=BRIGHTNESS=128
+# BACKLIGHT_PATH: ใช้ 10-0045 สำหรับ Pi OS Bookworm + KMS driver (vc4-kms-v3d)
+# หรือ rpi_backlight สำหรับ Pi OS Bullseye / Legacy driver
+Environment=BACKLIGHT_PATH=10-0045
+ExecStart=/bin/sh -c 'echo $BRIGHTNESS > /sys/class/backlight/$BACKLIGHT_PATH/brightness'
+
+[Install]
+WantedBy=sysinit.target
