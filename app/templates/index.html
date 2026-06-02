@@ -113,16 +113,16 @@
           <div class="weather-search-wrap weather-form-wrap">
             <div class="weather-location-form">
               <label class="weather-field-label">
-                <span class="weather-field-name">ตำบล</span>
-                <input type="text" id="weatherTambonInput" class="weather-search-input" placeholder="เช่น วังโตนด" autocomplete="off" />
+                <span class="weather-field-name">จังหวัด <span class="weather-field-required">*</span></span>
+                <select id="weatherProvinceInput" class="weather-search-input"></select>
               </label>
               <label class="weather-field-label">
                 <span class="weather-field-name">อำเภอ</span>
-                <input type="text" id="weatherAmphoeInput" class="weather-search-input" placeholder="เช่น นายายอาม" autocomplete="off" />
+                <select id="weatherAmphoeInput" class="weather-search-input"></select>
               </label>
               <label class="weather-field-label">
-                <span class="weather-field-name">จังหวัด <span class="weather-field-required">*</span></span>
-                <input type="text" id="weatherProvinceInput" class="weather-search-input" placeholder="เช่น จันทบุรี" autocomplete="off" />
+                <span class="weather-field-name">ตำบล</span>
+                <select id="weatherTambonInput" class="weather-search-input"></select>
               </label>
               <button id="weatherLoadBtn" class="weather-load-btn" type="button"><i class="bi bi-cloud-download"></i> โหลด</button>
               <button id="weatherCompareBtn" class="weather-load-btn weather-compare-btn" type="button"><i class="bi bi-columns-gap"></i> เทียบข้อมูล</button>
@@ -761,6 +761,10 @@
       const WEATHER_AUTO_REFRESH_MS = 15 * 60 * 1000;
       const WEATHER_COMPARE_FIELDS = ["tc_min", "tc_max", "rh", "rain", "ws10m", "cond"];
 
+      const weatherProvinceInput = document.getElementById("weatherProvinceInput");
+      const weatherAmphoeInput = document.getElementById("weatherAmphoeInput");
+      const weatherTambonInput = document.getElementById("weatherTambonInput");
+
       let activeWeatherPlace = null;
       let weatherAutoRefreshTimer = null;
       let weatherMidnightRefreshTimer = null;
@@ -934,6 +938,56 @@
           badge.textContent = areaText;
         }
         badge.classList.remove("hidden");
+      }
+
+      function setSelectOptions(selectEl, items, emptyLabel, selectedValue = "") {
+        if (!selectEl) return;
+        const options = [`<option value="">${emptyLabel}</option>`];
+        (items || []).forEach((item) => {
+          const value = String(item || "").trim();
+          if (!value) return;
+          options.push(`<option value="${value}">${value}</option>`);
+        });
+        selectEl.innerHTML = options.join("");
+        if (selectedValue && Array.from(selectEl.options).some((opt) => opt.value === selectedValue)) {
+          selectEl.value = selectedValue;
+        } else {
+          selectEl.value = "";
+        }
+      }
+
+      async function fetchLocationItems(url) {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error(`โหลดรายการพื้นที่ไม่สำเร็จ: ${await parseApiError(res)}`);
+        const payload = await res.json();
+        if (!Array.isArray(payload.items)) return [];
+        return payload.items;
+      }
+
+      async function loadProvinceOptions(selectedValue = "") {
+        const items = await fetchLocationItems("/api/locations/provinces");
+        setSelectOptions(weatherProvinceInput, items, "เลือกจังหวัด", selectedValue);
+      }
+
+      async function loadAmphoeOptions(province, selectedValue = "") {
+        if (!province) {
+          setSelectOptions(weatherAmphoeInput, [], "ไม่เลือกอำเภอ (ระดับจังหวัด)", "");
+          setSelectOptions(weatherTambonInput, [], "ไม่เลือกตำบล", "");
+          return;
+        }
+        const url = `/api/locations/amphoes?province=${encodeURIComponent(province)}`;
+        const items = await fetchLocationItems(url);
+        setSelectOptions(weatherAmphoeInput, items, "ไม่เลือกอำเภอ (ระดับจังหวัด)", selectedValue);
+      }
+
+      async function loadTambonOptions(province, amphoe, selectedValue = "") {
+        if (!province || !amphoe) {
+          setSelectOptions(weatherTambonInput, [], "ไม่เลือกตำบล", "");
+          return;
+        }
+        const url = `/api/locations/tambons?province=${encodeURIComponent(province)}&amphoe=${encodeURIComponent(amphoe)}`;
+        const items = await fetchLocationItems(url);
+        setSelectOptions(weatherTambonInput, items, "ไม่เลือกตำบล", selectedValue);
       }
 
       function extractRawForecasts(rawPayload) {
@@ -1117,9 +1171,9 @@
       }
 
       document.getElementById("weatherLoadBtn").addEventListener("click", () => {
-        const province = document.getElementById("weatherProvinceInput").value.trim();
-        const amphoe = document.getElementById("weatherAmphoeInput").value.trim();
-        const tambon = document.getElementById("weatherTambonInput").value.trim();
+        const province = weatherProvinceInput.value.trim();
+        const amphoe = weatherAmphoeInput.value.trim();
+        const tambon = weatherTambonInput.value.trim();
         if (!province) {
           document.getElementById("weatherForecast").innerHTML = '<p class="weather-empty weather-error">กรุณาระบุจังหวัด</p>';
           return;
@@ -1133,9 +1187,9 @@
           return;
         }
 
-        const province = document.getElementById("weatherProvinceInput").value.trim();
-        const amphoe = document.getElementById("weatherAmphoeInput").value.trim();
-        const tambon = document.getElementById("weatherTambonInput").value.trim();
+        const province = weatherProvinceInput.value.trim();
+        const amphoe = weatherAmphoeInput.value.trim();
+        const tambon = weatherTambonInput.value.trim();
         if (!province) {
           document.getElementById("weatherForecast").innerHTML = '<p class="weather-empty weather-error">กรุณาระบุจังหวัด</p>';
           return;
@@ -1148,33 +1202,65 @@
 
       setComparePanelVisible(false);
 
-      ["weatherProvinceInput", "weatherAmphoeInput", "weatherTambonInput"].forEach((id) => {
-        const input = document.getElementById(id);
-        input.addEventListener("keydown", (ev) => {
-          if (ev.key !== "Enter") return;
-          ev.preventDefault();
-          document.getElementById("weatherLoadBtn").click();
-        });
+      weatherProvinceInput.addEventListener("change", async () => {
+        const province = weatherProvinceInput.value.trim();
+        await loadAmphoeOptions(province, "");
+        await loadTambonOptions(province, "", "");
       });
 
-      // Restore saved location on load
-      try {
-        const saved = localStorage.getItem(WEATHER_LOC_KEY);
-        if (saved) {
-          const place = JSON.parse(saved);
-          document.getElementById("weatherProvinceInput").value = place.province || "";
-          document.getElementById("weatherAmphoeInput").value = place.amphoe || "";
-          document.getElementById("weatherTambonInput").value = place.tambon || "";
-          if (place.province) {
-            loadWeatherAndSummary(place);
+      weatherAmphoeInput.addEventListener("change", async () => {
+        const province = weatherProvinceInput.value.trim();
+        const amphoe = weatherAmphoeInput.value.trim();
+        await loadTambonOptions(province, amphoe, "");
+      });
+
+      async function initWeatherLocationSelectors() {
+        let initialPlace = null;
+        try {
+          const saved = localStorage.getItem(WEATHER_LOC_KEY);
+          if (saved) {
+            const place = JSON.parse(saved);
+            initialPlace = {
+              province: (place?.province || "").trim(),
+              amphoe: (place?.amphoe || "").trim(),
+              tambon: (place?.tambon || "").trim(),
+            };
           }
-        } else if (defaultPlaceFromServer.province) {
-          document.getElementById("weatherProvinceInput").value = defaultPlaceFromServer.province;
-          document.getElementById("weatherAmphoeInput").value = defaultPlaceFromServer.amphoe;
-          document.getElementById("weatherTambonInput").value = defaultPlaceFromServer.tambon;
-          loadWeatherAndSummary(defaultPlaceFromServer);
+        } catch {
+          initialPlace = null;
         }
-      } catch { /* ignore */ }
+
+        if (!initialPlace || !initialPlace.province) {
+          initialPlace = {
+            province: defaultPlaceFromServer.province,
+            amphoe: defaultPlaceFromServer.amphoe,
+            tambon: defaultPlaceFromServer.tambon,
+          };
+        }
+
+        try {
+          await loadProvinceOptions(initialPlace?.province || "");
+          const province = weatherProvinceInput.value.trim();
+          await loadAmphoeOptions(province, initialPlace?.amphoe || "");
+          const amphoe = weatherAmphoeInput.value.trim();
+          await loadTambonOptions(province, amphoe, initialPlace?.tambon || "");
+
+          if (province) {
+            loadWeatherAndSummary({
+              province,
+              amphoe,
+              tambon: weatherTambonInput.value.trim(),
+            });
+          }
+        } catch (err) {
+          console.warn("Failed to initialize location selectors:", err);
+          setSelectOptions(weatherProvinceInput, [], "เลือกจังหวัด", "");
+          setSelectOptions(weatherAmphoeInput, [], "ไม่เลือกอำเภอ (ระดับจังหวัด)", "");
+          setSelectOptions(weatherTambonInput, [], "ไม่เลือกตำบล", "");
+        }
+      }
+
+      initWeatherLocationSelectors();
 
       setupWeatherAutoRefresh();
       setupWeatherMidnightRefresh();

@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import settings
 from app.db import Database
 from app.farm_summary import build_farm_summary, format_line_alert
+from app.location_catalog import ThaiLocationCatalog
 from app.line_notifier import LineNotifier
 from app.mqtt_client import MqttIngestClient
 from app.service import DataService
@@ -28,6 +29,7 @@ db = Database(settings.db_path)
 service = DataService(db)
 mqtt_client = MqttIngestClient(settings, service)
 tmd_client = TmdWeatherClient(settings.tmd_base_url, settings.tmd_access_token)
+location_catalog = ThaiLocationCatalog(fallback_provinces=[settings.tmd_province])
 line_notifier = LineNotifier(settings.line_channel_access_token, settings.line_user_id)
 
 _last_line_alert_sent_at: dt.datetime | None = None
@@ -333,6 +335,29 @@ async def index(request: Request) -> HTMLResponse:
 async def api_latest() -> JSONResponse:
     latest = service.get_latest()
     return JSONResponse(content={"data": latest})
+
+
+@app.get("/api/locations/provinces")
+async def api_location_provinces() -> JSONResponse:
+    provinces = await location_catalog.list_provinces()
+    return JSONResponse(content={"items": provinces})
+
+
+@app.get("/api/locations/amphoes")
+async def api_location_amphoes(
+    province: str = Query("", max_length=120),
+) -> JSONResponse:
+    amphoes = await location_catalog.list_amphoes(province)
+    return JSONResponse(content={"items": amphoes})
+
+
+@app.get("/api/locations/tambons")
+async def api_location_tambons(
+    province: str = Query("", max_length=120),
+    amphoe: str = Query("", max_length=120),
+) -> JSONResponse:
+    tambons = await location_catalog.list_tambons(province, amphoe)
+    return JSONResponse(content={"items": tambons})
 
 
 @app.get("/api/history")
