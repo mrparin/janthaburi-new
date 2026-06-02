@@ -125,6 +125,7 @@
                 <input type="text" id="weatherProvinceInput" class="weather-search-input" placeholder="เช่น จันทบุรี" autocomplete="off" />
               </label>
               <button id="weatherLoadBtn" class="weather-load-btn" type="button"><i class="bi bi-cloud-download"></i> โหลด</button>
+              <button id="weatherCompareBtn" class="weather-load-btn weather-compare-btn" type="button"><i class="bi bi-columns-gap"></i> เทียบข้อมูล</button>
             </div>
           </div>
           <span id="weatherLocationName" class="weather-location-badge hidden"></span>
@@ -141,6 +142,40 @@
           <p id="farmSummaryReasons" class="farm-summary-list">-</p>
           <p id="farmSummaryActions" class="farm-summary-list">-</p>
         </div>
+
+        <section id="weatherComparePanel" class="weather-compare-panel hidden">
+          <div class="weather-compare-head">
+            <h3 class="weather-forecast-title"><i class="bi bi-columns-gap" aria-hidden="true"></i> ตรวจความตรงแบบเรียลไทม์: ระบบ vs ข้อมูลดิบ TMD</h3>
+            <span id="weatherCompareUpdatedAt" class="weather-compare-updated">ยังไม่เริ่มเทียบ</span>
+          </div>
+          <p id="weatherCompareSummary" class="weather-compare-summary">กดปุ่ม "เทียบข้อมูล" เพื่อดึงข้อมูลล่าสุดทั้งสองฝั่ง</p>
+          <div class="weather-compare-grid">
+            <article class="weather-compare-card">
+              <h4><i class="bi bi-diagram-3"></i> ข้อมูลที่ระบบใช้งานจริง (/api/weather)</h4>
+              <pre id="weatherCompareSystemJson">-</pre>
+            </article>
+            <article class="weather-compare-card">
+              <h4><i class="bi bi-database"></i> ข้อมูลดิบจาก TMD (/api/weather/raw)</h4>
+              <pre id="weatherCompareRawJson">-</pre>
+            </article>
+          </div>
+          <div class="weather-compare-table-wrap">
+            <table class="weather-compare-table">
+              <thead>
+                <tr>
+                  <th>วัน</th>
+                  <th>ฟิลด์</th>
+                  <th>ระบบ</th>
+                  <th>TMD ดิบ</th>
+                  <th>ผลเทียบ</th>
+                </tr>
+              </thead>
+              <tbody id="weatherCompareRows">
+                <tr><td colspan="5">ยังไม่มีข้อมูล</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
 
@@ -724,11 +759,30 @@
       const DAYS_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"];
       const WEATHER_LOC_KEY = "weather_location_tmd_place";
       const WEATHER_AUTO_REFRESH_MS = 15 * 60 * 1000;
+      const WEATHER_COMPARE_FIELDS = ["tc_min", "tc_max", "rh", "rain", "ws10m", "cond"];
 
       let activeWeatherPlace = null;
       let weatherAutoRefreshTimer = null;
       let weatherMidnightRefreshTimer = null;
       let weatherLoading = false;
+      let compareLoading = false;
+
+      const weatherCompareBtn = document.getElementById("weatherCompareBtn");
+      const weatherComparePanel = document.getElementById("weatherComparePanel");
+      const weatherCompareSummary = document.getElementById("weatherCompareSummary");
+      const weatherCompareUpdatedAt = document.getElementById("weatherCompareUpdatedAt");
+      const weatherCompareRows = document.getElementById("weatherCompareRows");
+      const weatherCompareSystemJson = document.getElementById("weatherCompareSystemJson");
+      const weatherCompareRawJson = document.getElementById("weatherCompareRawJson");
+
+      function setComparePanelVisible(visible) {
+        weatherComparePanel.classList.toggle("hidden", !visible);
+        if (visible) {
+          weatherCompareBtn.innerHTML = '<i class="bi bi-eye-slash"></i> ซ่อนการเทียบ';
+          return;
+        }
+        weatherCompareBtn.innerHTML = '<i class="bi bi-columns-gap"></i> เทียบข้อมูล';
+      }
 
       function isSameLocalDate(a, b) {
         return (
@@ -772,8 +826,12 @@
       function buildPlaceQuery(place) {
         const params = new URLSearchParams();
         if (place.province) params.set("province", place.province);
-        if (place.amphoe) params.set("amphoe", place.amphoe);
-        if (place.tambon) params.set("tambon", place.tambon);
+
+        // Send explicit blank values so backend can distinguish
+        // "intentionally empty" from "parameter not provided".
+        params.set("amphoe", place.amphoe || "");
+        params.set("tambon", place.tambon || "");
+
         params.set("duration_days", String(defaultDurationDays));
         return params.toString();
       }
@@ -834,7 +892,14 @@
           else if (cond === 7) weatherClass = "weather-cond-storm";
           const tmax = forecast.tc_max != null ? Number(forecast.tc_max).toFixed(1) : "-";
           const tmin = forecast.tc_min != null ? Number(forecast.tc_min).toFixed(1) : "-";
-          const rain = forecast.rain != null ? Number(forecast.rain).toFixed(1) : "-";
+          const rainRaw = forecast.rain != null ? Number(forecast.rain) : null;
+          let rainMm = forecast.rain_mm != null ? Number(forecast.rain_mm) : null;
+          let rainPct = forecast.rain_pct != null ? Number(forecast.rain_pct) : null;
+          if (rainMm == null && rainRaw != null && rainRaw > 100) rainMm = rainRaw;
+          if (rainPct == null && rainRaw != null && rainRaw >= 0 && rainRaw <= 100) rainPct = rainRaw;
+
+          const rainMmText = rainMm != null ? `${rainMm.toFixed(1)} มม.` : "- มม.";
+          const rainPctText = rainPct != null ? `${rainPct.toFixed(0)}%` : "-%";
           const rh = forecast.rh != null ? Number(forecast.rh).toFixed(0) : "-";
           const wind = forecast.ws10m != null ? Number(forecast.ws10m).toFixed(1) : "-";
           const card = document.createElement("div");
@@ -849,19 +914,163 @@
               <span class="temp-sep">/</span>
               <span class="temp-min">${tmin}°</span>
             </div>
-            <div class="weather-day-rain"><i class="bi bi-droplet-fill" aria-hidden="true"></i> RH ${rh}% · ฝน ${rain} มม.</div>
+            <div class="weather-day-rain"><i class="bi bi-droplet-fill" aria-hidden="true"></i> RH ${rh}% · ฝน ${rainMmText} · โอกาสฝน ${rainPctText}</div>
             <div class="weather-day-wind"><i class="bi bi-wind" aria-hidden="true"></i> ${wind} m/s</div>
           `;
           container.appendChild(card);
         });
       }
 
-      function setLocationBadge(place, locationFromApi) {
+      function setLocationBadge(place, locationFromApi, queryMeta) {
         const badge = document.getElementById("weatherLocationName");
         const source = locationFromApi || {};
         const items = [source.tambon || place.tambon, source.amphoe || place.amphoe, source.province || place.province].filter(Boolean);
-        badge.textContent = items.join(" ");
+        const areaText = items.join(" ");
+        const fallbackUsed = Boolean(queryMeta?.fallback_used);
+        const usedScope = queryMeta?.used?.scope;
+        if (fallbackUsed && usedScope) {
+          badge.textContent = `${areaText} (fallback: ระดับ ${usedScope})`;
+        } else {
+          badge.textContent = areaText;
+        }
         badge.classList.remove("hidden");
+      }
+
+      function extractRawForecasts(rawPayload) {
+        if (!rawPayload || typeof rawPayload !== "object") return [];
+        const list = Array.isArray(rawPayload.WeatherForecasts) ? rawPayload.WeatherForecasts : [];
+        const first = list[0];
+        if (!first || !Array.isArray(first.forecasts)) return [];
+        return first.forecasts
+          .filter((x) => x && typeof x === "object")
+          .map((x) => ({
+            time: x.time,
+            tc_min: x.data?.tc_min,
+            tc_max: x.data?.tc_max,
+            rh: x.data?.rh,
+            rain: x.data?.rain,
+            ws10m: x.data?.ws10m,
+            cond: x.data?.cond,
+          }));
+      }
+
+      function areCloseNumbers(a, b, tolerance = 0.01) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        const av = Number(a);
+        const bv = Number(b);
+        if (!Number.isFinite(av) || !Number.isFinite(bv)) return String(a) === String(b);
+        return Math.abs(av - bv) <= tolerance;
+      }
+
+      function renderComparisonRows(systemDays, rawDays) {
+        const rows = [];
+        const rawMap = new Map((rawDays || []).map((x) => [String(x.time || ""), x]));
+
+        (systemDays || []).forEach((sDay, idx) => {
+          const key = String(sDay.time || "");
+          const rDay = rawMap.get(key) || rawDays?.[idx] || {};
+          const dayLabel = sDay.time ? new Date(sDay.time).toLocaleDateString("th-TH", { day: "2-digit", month: "short" }) : `#${idx + 1}`;
+
+          WEATHER_COMPARE_FIELDS.forEach((field) => {
+            const sv = sDay[field] ?? null;
+            const rv = rDay[field] ?? null;
+            const matched = areCloseNumbers(sv, rv);
+            rows.push(`
+              <tr>
+                <td>${dayLabel}</td>
+                <td>${field}</td>
+                <td>${sv ?? "-"}</td>
+                <td>${rv ?? "-"}</td>
+                <td class="${matched ? "cmp-ok" : "cmp-miss"}">${matched ? "ตรง" : "ต่าง"}</td>
+              </tr>
+            `);
+          });
+        });
+
+        weatherCompareRows.innerHTML = rows.length ? rows.join("") : '<tr><td colspan="5">ไม่มีข้อมูลสำหรับเทียบ</td></tr>';
+      }
+
+      function summarizeComparison(systemDays, rawDays, queryMeta) {
+        let total = 0;
+        let matched = 0;
+        const rawMap = new Map((rawDays || []).map((x) => [String(x.time || ""), x]));
+
+        (systemDays || []).forEach((sDay, idx) => {
+          const key = String(sDay.time || "");
+          const rDay = rawMap.get(key) || rawDays?.[idx] || {};
+          WEATHER_COMPARE_FIELDS.forEach((field) => {
+            total += 1;
+            if (areCloseNumbers(sDay[field] ?? null, rDay[field] ?? null)) {
+              matched += 1;
+            }
+          });
+        });
+
+        const pct = total > 0 ? ((matched / total) * 100).toFixed(1) : "0.0";
+        const fallbackText = queryMeta?.fallback_used ? `มี fallback ระดับ ${queryMeta?.used?.scope || "-"}` : "ไม่ใช้ fallback";
+        return `ผลเทียบ: ตรง ${matched}/${total} ฟิลด์ (${pct}%) · ${fallbackText}`;
+      }
+
+
+      async function loadWeatherComparison(place, weatherDataFromSystem = null) {
+        if (compareLoading) return;
+        compareLoading = true;
+        setComparePanelVisible(true);
+        weatherCompareSummary.textContent = "กำลังดึงข้อมูลเพื่อเทียบ...";
+        weatherCompareBtn.disabled = true;
+
+        try {
+          const queryString = buildPlaceQuery(place);
+          const systemPromise = weatherDataFromSystem
+            ? Promise.resolve(weatherDataFromSystem)
+            : fetch(`/api/weather?${queryString}`, { cache: "no-store" }).then(async (res) => {
+                if (!res.ok) throw new Error(`ระบบ: ${await parseApiError(res)}`);
+                return res.json();
+              });
+
+          const rawPromise = fetch(`/api/weather/raw?${queryString}`, { cache: "no-store" }).then(async (res) => {
+            if (!res.ok) throw new Error(`TMD ดิบ: ${await parseApiError(res)}`);
+            return res.json();
+          });
+
+          const [systemData, rawData] = await Promise.all([systemPromise, rawPromise]);
+          const rawDays = extractRawForecasts(rawData.raw_payload);
+          const systemDays = Array.isArray(systemData.days) ? systemData.days : [];
+
+          weatherCompareSystemJson.textContent = JSON.stringify(
+            {
+              location: systemData.location,
+              query_meta: systemData.query_meta,
+              days: systemDays.slice(0, 7),
+            },
+            null,
+            2,
+          );
+          weatherCompareRawJson.textContent = JSON.stringify(
+            {
+              query_meta: rawData.query_meta,
+              resolved_location: rawData.resolved_location,
+              request_params: rawData.request_params,
+              weather_forecasts: Array.isArray(rawData.raw_payload?.WeatherForecasts)
+                ? rawData.raw_payload.WeatherForecasts.slice(0, 1)
+                : [],
+            },
+            null,
+            2,
+          );
+
+          renderComparisonRows(systemDays, rawDays);
+          weatherCompareSummary.textContent = summarizeComparison(systemDays, rawDays, systemData.query_meta);
+          weatherCompareUpdatedAt.textContent = `อัปเดตล่าสุด ${new Date().toLocaleString("th-TH")}`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "ไม่สามารถเทียบข้อมูลได้";
+          weatherCompareSummary.textContent = `เกิดข้อผิดพลาด: ${msg}`;
+          weatherCompareRows.innerHTML = '<tr><td colspan="5">ไม่สามารถโหลดข้อมูลสำหรับเทียบได้</td></tr>';
+        } finally {
+          compareLoading = false;
+          weatherCompareBtn.disabled = false;
+        }
       }
 
       async function loadWeatherAndSummary(place, options = {}) {
@@ -891,7 +1100,10 @@
           const summaryData = await summaryRes.json();
           renderWeatherCards(weatherData);
           renderFarmSummary(summaryData.summary);
-          setLocationBadge(normalizedPlace, weatherData.location);
+          setLocationBadge(normalizedPlace, weatherData.location, weatherData.query_meta);
+          if (!weatherComparePanel.classList.contains("hidden")) {
+            await loadWeatherComparison(normalizedPlace, weatherData);
+          }
           if (persist) {
             localStorage.setItem(WEATHER_LOC_KEY, JSON.stringify(normalizedPlace));
           }
@@ -914,6 +1126,27 @@
         }
         loadWeatherAndSummary({ province, amphoe, tambon });
       });
+
+      weatherCompareBtn.addEventListener("click", async () => {
+        if (!weatherComparePanel.classList.contains("hidden")) {
+          setComparePanelVisible(false);
+          return;
+        }
+
+        const province = document.getElementById("weatherProvinceInput").value.trim();
+        const amphoe = document.getElementById("weatherAmphoeInput").value.trim();
+        const tambon = document.getElementById("weatherTambonInput").value.trim();
+        if (!province) {
+          document.getElementById("weatherForecast").innerHTML = '<p class="weather-empty weather-error">กรุณาระบุจังหวัด</p>';
+          return;
+        }
+
+        const place = { province, amphoe, tambon };
+        activeWeatherPlace = place;
+        await loadWeatherComparison(place);
+      });
+
+      setComparePanelVisible(false);
 
       ["weatherProvinceInput", "weatherAmphoeInput", "weatherTambonInput"].forEach((id) => {
         const input = document.getElementById(id);

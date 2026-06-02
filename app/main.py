@@ -150,9 +150,15 @@ def _choose_place(
     amphoe: str | None,
     tambon: str | None,
 ) -> PlaceQuery:
-    p = (province or settings.tmd_province).strip()
-    a = (amphoe or settings.tmd_amphoe).strip() or None
-    t = (tambon or settings.tmd_tambon).strip() or None
+    # None means "not provided" -> allow default from settings.
+    # Empty string means "provided but intentionally blank" -> keep as None (no default fallback).
+    p_raw = settings.tmd_province if province is None else province
+    a_raw = settings.tmd_amphoe if amphoe is None else amphoe
+    t_raw = settings.tmd_tambon if tambon is None else tambon
+
+    p = p_raw.strip()
+    a = a_raw.strip() or None
+    t = t_raw.strip() or None
     if not p:
         raise HTTPException(status_code=400, detail="province is required")
     return PlaceQuery(province=p, amphoe=a, tambon=t)
@@ -355,9 +361,9 @@ async def api_scatter(
 
 @app.get("/api/weather")
 async def api_weather(
-    province: str = Query("", max_length=120),
-    amphoe: str = Query("", max_length=120),
-    tambon: str = Query("", max_length=120),
+    province: str | None = Query(None, max_length=120),
+    amphoe: str | None = Query(None, max_length=120),
+    tambon: str | None = Query(None, max_length=120),
     duration_days: int = Query(7, ge=1, le=14),
 ) -> JSONResponse:
     try:
@@ -368,11 +374,26 @@ async def api_weather(
     return JSONResponse(content=data)
 
 
+@app.get("/api/weather/raw")
+async def api_weather_raw(
+    province: str | None = Query(None, max_length=120),
+    amphoe: str | None = Query(None, max_length=120),
+    tambon: str | None = Query(None, max_length=120),
+    duration_days: int = Query(7, ge=1, le=14),
+) -> JSONResponse:
+    try:
+        place = _choose_place(province, amphoe, tambon)
+        data = await tmd_client.fetch_daily_raw_by_place(place, duration_days=duration_days)
+    except TmdApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return JSONResponse(content=data)
+
+
 @app.get("/api/farm-summary")
 async def api_farm_summary(
-    province: str = Query("", max_length=120),
-    amphoe: str = Query("", max_length=120),
-    tambon: str = Query("", max_length=120),
+    province: str | None = Query(None, max_length=120),
+    amphoe: str | None = Query(None, max_length=120),
+    tambon: str | None = Query(None, max_length=120),
     duration_days: int = Query(7, ge=1, le=14),
 ) -> JSONResponse:
     try:
@@ -385,9 +406,9 @@ async def api_farm_summary(
 
 @app.post("/api/line/test-alert")
 async def api_line_test_alert(
-    province: str = Query("", max_length=120),
-    amphoe: str = Query("", max_length=120),
-    tambon: str = Query("", max_length=120),
+    province: str | None = Query(None, max_length=120),
+    amphoe: str | None = Query(None, max_length=120),
+    tambon: str | None = Query(None, max_length=120),
 ) -> JSONResponse:
     if not line_notifier.enabled:
         raise HTTPException(status_code=400, detail="LINE notifier is not configured")

@@ -22,6 +22,20 @@ def _safe_float(value: Any) -> float | None:
     return None
 
 
+def _normalize_rain(day: dict[str, Any]) -> tuple[float | None, float | None, float | None]:
+    rain_raw = _safe_float(day.get("rain"))
+    rain_mm = _safe_float(day.get("rain_mm"))
+    rain_pct = _safe_float(day.get("rain_pct"))
+
+    # If backend receives only one "rain" value, keep backward-compatible interpretation.
+    if rain_pct is None and rain_raw is not None and 0.0 <= rain_raw <= 100.0:
+        rain_pct = rain_raw
+    if rain_mm is None and rain_raw is not None and rain_raw > 100.0:
+        rain_mm = rain_raw
+
+    return rain_raw, rain_mm, rain_pct
+
+
 def build_farm_summary(sensor_latest: dict[str, Any] | None, weather: dict[str, Any] | None) -> dict[str, Any]:
     days = weather.get("days", []) if isinstance(weather, dict) else []
     today = days[0] if days else {}
@@ -37,8 +51,13 @@ def build_farm_summary(sensor_latest: dict[str, Any] | None, weather: dict[str, 
     air_humi = _safe_float((sensor_latest or {}).get("air_humi"))
 
     max_temp_3d = max((_safe_float(x.get("tc_max")) for x in next_3_days), default=None)
-    rain_3d = sum((_safe_float(x.get("rain")) or 0.0 for x in next_3_days)) if next_3_days else 0.0
-    today_rain = _safe_float(today.get("rain"))
+    rain_triplets = [_normalize_rain(x) for x in next_3_days]
+    rain_mm_values = [mm for _, mm, _ in rain_triplets if mm is not None]
+    rain_pct_values = [pct for _, _, pct in rain_triplets if pct is not None]
+    rain_3d_mm = sum(rain_mm_values) if rain_mm_values else None
+    rain_3d_pct_max = max(rain_pct_values) if rain_pct_values else None
+
+    today_rain_raw, today_rain_mm, today_rain_pct = _normalize_rain(today)
     today_cond = today.get("cond")
 
     if vpd is not None and vpd > 1.8:
@@ -59,14 +78,24 @@ def build_farm_summary(sensor_latest: dict[str, Any] | None, weather: dict[str, 
         reasons.append("พยากรณ์อุณหภูมิสูงสุด 3 วันค่อนข้างสูง")
         actions.append("ติดตามอุณหภูมิทรงพุ่มอย่างใกล้ชิด")
 
-    if rain_3d >= 60:
-        risk_score += 2
-        reasons.append("พยากรณ์ฝนสะสม 3 วันสูง")
-        actions.append("ระบายน้ำโคนต้นและลดการให้น้ำ")
-    elif rain_3d >= 25:
-        risk_score += 1
-        reasons.append("พยากรณ์มีฝนต่อเนื่อง")
-        actions.append("ตรวจการระบายน้ำและโรคจากความชื้น")
+    if rain_3d_mm is not None:
+        if rain_3d_mm >= 60:
+            risk_score += 2
+            reasons.append("พยากรณ์ฝนสะสม 3 วันสูง (มม.)")
+            actions.append("ระบายน้ำโคนต้นและลดการให้น้ำ")
+        elif rain_3d_mm >= 25:
+            risk_score += 1
+            reasons.append("พยากรณ์มีฝนต่อเนื่อง (มม.)")
+            actions.append("ตรวจการระบายน้ำและโรคจากความชื้น")
+    elif rain_3d_pct_max is not None:
+        if rain_3d_pct_max >= 80:
+            risk_score += 2
+            reasons.append("โอกาสเกิดฝน 3 วันอยู่ในระดับสูง (%)")
+            actions.append("เตรียมทางระบายน้ำและลดการให้น้ำล่วงหน้า")
+        elif rain_3d_pct_max >= 60:
+            risk_score += 1
+            reasons.append("โอกาสเกิดฝน 3 วันอยู่ในระดับเฝ้าระวัง (%)")
+            actions.append("ติดตามเรดาร์ฝนและวางแผนการให้น้ำ")
 
     if soil_humi is not None and soil_humi < 35:
         risk_score += 1
@@ -106,13 +135,16 @@ def build_farm_summary(sensor_latest: dict[str, Any] | None, weather: dict[str, 
                 "tc_min": _safe_float(today.get("tc_min")),
                 "tc_max": _safe_float(today.get("tc_max")),
                 "rh": _safe_float(today.get("rh")),
-                "rain": today_rain,
+                "rain": today_rain_raw,
+                "rain_mm": today_rain_mm,
+                "rain_pct": today_rain_pct,
                 "cond": today_cond,
                 "cond_text": COND_LABELS.get(today_cond, "ไม่ระบุ"),
             },
             "forecast_3d": {
                 "max_temp": max_temp_3d,
-                "rain_sum": rain_3d,
+                "rain_sum_mm": rain_3d_mm,
+                "rain_max_pct": rain_3d_pct_max,
             },
         },
     }
@@ -121,6 +153,16 @@ def build_farm_summary(sensor_latest: dict[str, Any] | None, weather: dict[str, 
 def format_line_alert(location_name: str, summary: dict[str, Any]) -> str:
     s = summary.get("snapshot", {}) if isinstance(summary, dict) else {}
     f_today = s.get("forecast_today", {}) if isinstance(s.get("forecast_today"), dict) else {}
+    rain_mm = f_today.get("rain_mm")
+    rain_pct = f_today.get("rain_pct")
+
+    if rain_mm is None and isinstance(f_today.get("rain"), (int, float)) and float(f_today.get("rain")) > 100.0:
+        rain_mm = f_today.get("rain")
+    if rain_pct is None and isinstance(f_today.get("rain"), (int, float)) and 0.0 <= float(f_today.get("rain")) <= 100.0:
+        rain_pct = f_today.get("rain")
+
+    rain_mm_text = f"{rain_mm:.1f}" if isinstance(rain_mm, (int, float)) else "-"
+    rain_pct_text = f"{rain_pct:.0f}" if isinstance(rain_pct, (int, float)) else "-"
 
     risk_level = str(summary.get("risk_level", "-")).lower()
     if risk_level == "danger":
@@ -145,7 +187,7 @@ def format_line_alert(location_name: str, summary: dict[str, Any]) -> str:
         "🌤️ พยากรณ์วันนี้ (TMD):",
         f"🌡️ Tmax/Tmin: {f_today.get('tc_max', '-')}/{f_today.get('tc_min', '-')} C",
         f"💧 RH: {f_today.get('rh', '-')}%",
-        f"🌧️ Rain: {f_today.get('rain', '-')} mm",
+        f"🌧️ Rain: {rain_mm_text} mm | {rain_pct_text}%",
         f"☁️ Condition: {f_today.get('cond_text', '-')}",
         "",
         "🛠️ ข้อแนะนำ:",
