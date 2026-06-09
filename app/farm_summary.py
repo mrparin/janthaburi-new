@@ -19,6 +19,14 @@ COND_LABELS = {
 def _safe_float(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return float(text.replace(",", ""))
+        except ValueError:
+            return None
     return None
 
 
@@ -27,10 +35,8 @@ def _normalize_rain(day: dict[str, Any]) -> tuple[float | None, float | None, fl
     rain_mm = _safe_float(day.get("rain_mm"))
     rain_pct = _safe_float(day.get("rain_pct"))
 
-    # If backend receives only one "rain" value, keep backward-compatible interpretation.
-    if rain_pct is None and rain_raw is not None and 0.0 <= rain_raw <= 100.0:
-        rain_pct = rain_raw
-    if rain_mm is None and rain_raw is not None and rain_raw > 100.0:
+    # Treat raw rain as rainfall amount (mm) by default if rain_mm is absent.
+    if rain_mm is None and rain_raw is not None:
         rain_mm = rain_raw
 
     return rain_raw, rain_mm, rain_pct

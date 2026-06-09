@@ -876,6 +876,12 @@
       }
 
       function renderWeatherCards(data) {
+        const toFiniteNumber = (value) => {
+          if (value == null) return null;
+          const n = Number(value);
+          return Number.isFinite(n) ? n : null;
+        };
+
         const days = data.days;
         const container = document.getElementById("weatherForecast");
         if (!Array.isArray(days) || days.length === 0) {
@@ -896,10 +902,10 @@
           else if (cond === 7) weatherClass = "weather-cond-storm";
           const tmax = forecast.tc_max != null ? Number(forecast.tc_max).toFixed(1) : "-";
           const tmin = forecast.tc_min != null ? Number(forecast.tc_min).toFixed(1) : "-";
-          const rainRaw = forecast.rain != null ? Number(forecast.rain) : null;
-          let rainMm = forecast.rain_mm != null ? Number(forecast.rain_mm) : null;
-          let rainPct = forecast.rain_pct != null ? Number(forecast.rain_pct) : null;
-          if (rainMm == null && rainRaw != null && rainRaw > 100) rainMm = rainRaw;
+          const rainRaw = toFiniteNumber(forecast.rain);
+          let rainMm = toFiniteNumber(forecast.rain_mm);
+          let rainPct = toFiniteNumber(forecast.rain_pct);
+          if (rainMm == null && rainRaw != null) rainMm = rainRaw;
           if (rainPct == null && rainRaw != null && rainRaw >= 0 && rainRaw <= 100) rainPct = rainRaw;
 
           const rainMmText = rainMm != null ? `${rainMm.toFixed(1)} มม.` : "- มม.";

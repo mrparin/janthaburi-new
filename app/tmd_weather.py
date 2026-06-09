@@ -64,6 +64,15 @@ class TmdWeatherClient:
     def _to_float(value: Any) -> float | None:
         if isinstance(value, (int, float)):
             return float(value)
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            # Some providers may return numeric values as strings.
+            try:
+                return float(text.replace(",", ""))
+            except ValueError:
+                return None
         return None
 
     @classmethod
@@ -310,10 +319,8 @@ class TmdWeatherClient:
             rain_mm = self._pick_first_float(data, ("rain_mm", "rainfall", "rain_24h"))
             rain_pct = self._pick_first_float(data, ("rain_pct", "rain_chance", "rain_prob", "pop"))
 
-            # Backward-compatible heuristic: if only "rain" exists, values in 0-100 are often chance/area.
-            if rain_pct is None and rain_raw is not None and 0.0 <= rain_raw <= 100.0:
-                rain_pct = rain_raw
-            if rain_mm is None and rain_raw is not None and rain_raw > 100.0:
+            # In this dashboard, treat raw rain as rainfall amount (mm) when rain_mm is absent.
+            if rain_mm is None and rain_raw is not None:
                 rain_mm = rain_raw
 
             days.append(
