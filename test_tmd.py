@@ -2,7 +2,9 @@ import httpx
 import asyncio
 from dotenv import load_dotenv
 import os
+import sys
 
+sys.stdout.reconfigure(encoding='utf-8')
 load_dotenv()
 
 async def main():
@@ -15,9 +17,8 @@ async def main():
     }
     
     params = {
-        "province": os.getenv("TMD_PROVINCE", "จันทบุรี"),
-        "amphoe": os.getenv("TMD_AMPHOE", "นายายอาม"),
-        "tambon": os.getenv("TMD_TAMBON", "วังโตนด"),
+        "province": "ปทุมธานี",
+        "date": "2026-07-12",
         "duration": 7,
         "fields": "tc_min,tc_max,rh,rain,ws10m,cond",
     }
