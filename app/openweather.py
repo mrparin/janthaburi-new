@@ -44,14 +44,28 @@ class OpenWeatherClient:
     async def geocode(self, query: PlaceQuery) -> tuple[float, float]:
         parts = [query.tambon, query.amphoe, query.province, "TH"]
         place_text = ",".join(part for part in parts if part)
-        payload = await self._get_json(
-            "/geo/1.0/direct", {"q": place_text, "limit": 1}
-        )
+        try:
+            payload = await self._get_json(
+                "/geo/1.0/direct", {"q": place_text, "limit": 1}
+            )
+        except OpenWeatherApiError as exc:
+            if "error: 404" in str(exc):
+                payload = []
+            else:
+                raise
+                
         if not isinstance(payload, list) or not payload:
             # Thai subdistrict names are not always indexed; retry at province level.
-            payload = await self._get_json(
-                "/geo/1.0/direct", {"q": f"{query.province},TH", "limit": 1}
-            )
+            try:
+                payload = await self._get_json(
+                    "/geo/1.0/direct", {"q": f"{query.province},TH", "limit": 1}
+                )
+            except OpenWeatherApiError as exc:
+                if "error: 404" in str(exc):
+                    payload = []
+                else:
+                    raise
+                    
         if not isinstance(payload, list) or not payload:
             raise OpenWeatherApiError("place not found in OpenWeather")
         first = payload[0]

@@ -102,7 +102,6 @@ class TmdWeatherClient:
     ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "province": province,
-            "date": (date or dt.date.today()).isoformat(),
             "duration": max(1, min(14, int(duration_days))),
             "fields": "tc_min,tc_max,rh,rain,ws10m,cond",
         }
