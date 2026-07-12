@@ -75,6 +75,23 @@ Lightweight MQTT dashboard for Raspberry Pi 3 without Node-RED, InfluxDB, or Thi
   - ถ้าไม่พบจะลดเป็น `อำเภอ+จังหวัด`
   - ถ้ายังไม่พบจะลอง `จังหวัด` เพื่อไม่ให้หน้าเว็บล้มง่ายเมื่อสะกดชื่อพื้นที่ไม่ตรง
 
+### OpenWeather fallback (optional)
+
+ระบบสามารถใช้ OpenWeather One Call 3.0 เป็นแหล่งสำรองเมื่อ TMD เชื่อมต่อไม่ได้,
+ตอบ error หรือคืนรายการพยากรณ์ว่าง โดย TMD ยังคงเป็นแหล่งข้อมูลหลัก ระบบ cache
+ผล OpenWeather 10 นาทีเพื่อลดจำนวน API calls
+
+```env
+WEATHER_FALLBACK_ENABLED=true
+OPENWEATHER_API_KEY=your_api_key
+OPENWEATHER_BASE_URL=https://api.openweathermap.org
+OPENWEATHER_TIMEOUT_SECONDS=15
+OPENWEATHER_CACHE_SECONDS=600
+```
+
+บัญชี OpenWeather ต้องเปิด One Call by Call เพื่อเรียก `/data/3.0/onecall` ได้
+หากไม่เปิดใช้งาน endpoint จะตอบ `401` และระบบจะรายงานว่า fallback ล้มเหลว
+
 ## การรันบนเครื่อง local (Windows) เพื่อทดสอบ
 
 ใช้ขั้นตอนนี้เพื่อทดสอบโปรเจกต์บนเครื่องนี้ (path ปัจจุบัน: `D:\codeArduino\vscode\pi-dashboard`)

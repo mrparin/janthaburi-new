@@ -16,8 +16,10 @@ from app.farm_summary import build_farm_summary, format_line_alert
 from app.location_catalog import ThaiLocationCatalog
 from app.line_notifier import LineNotifier
 from app.mqtt_client import MqttIngestClient
+from app.openweather import OpenWeatherClient
 from app.service import DataService
 from app.tmd_weather import PlaceQuery, TmdApiError, TmdWeatherClient
+from app.weather_provider import WeatherProvider
 
 from typing import Literal
 
@@ -29,6 +31,17 @@ db = Database(settings.db_path)
 service = DataService(db)
 mqtt_client = MqttIngestClient(settings, service)
 tmd_client = TmdWeatherClient(settings.tmd_base_url, settings.tmd_access_token)
+openweather_client = OpenWeatherClient(
+    settings.openweather_base_url,
+    settings.openweather_api_key,
+    timeout=settings.openweather_timeout_seconds,
+)
+weather_provider = WeatherProvider(
+    tmd_client,
+    openweather_client,
+    fallback_enabled=settings.weather_fallback_enabled,
+    cache_seconds=settings.openweather_cache_seconds,
+)
 location_catalog = ThaiLocationCatalog(fallback_provinces=[settings.tmd_province])
 line_notifier = LineNotifier(settings.line_channel_access_token, settings.line_user_id)
 
@@ -174,7 +187,7 @@ def _format_location_name(location: dict | None) -> str:
 
 
 async def _build_weather_and_summary(place: PlaceQuery, duration_days: int | None = None) -> dict:
-    weather = await tmd_client.fetch_daily_by_place(
+    weather = await weather_provider.fetch_daily_by_place(
         query=place,
         duration_days=duration_days or settings.tmd_forecast_days,
     )
@@ -393,7 +406,7 @@ async def api_weather(
 ) -> JSONResponse:
     try:
         place = _choose_place(province, amphoe, tambon)
-        data = await tmd_client.fetch_daily_by_place(place, duration_days=duration_days)
+        data = await weather_provider.fetch_daily_by_place(place, duration_days=duration_days)
     except TmdApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return JSONResponse(content=data)

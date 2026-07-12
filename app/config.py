@@ -38,6 +38,14 @@ class Settings:
     tmd_tambon: str = os.getenv("TMD_TAMBON", "")
     tmd_forecast_days: int = int(os.getenv("TMD_FORECAST_DAYS", "7"))
 
+    weather_fallback_enabled: bool = _env_bool("WEATHER_FALLBACK_ENABLED", False)
+    openweather_api_key: str = os.getenv("OPENWEATHER_API_KEY", "")
+    openweather_base_url: str = os.getenv(
+        "OPENWEATHER_BASE_URL", "https://api.openweathermap.org"
+    )
+    openweather_timeout_seconds: int = int(os.getenv("OPENWEATHER_TIMEOUT_SECONDS", "15"))
+    openweather_cache_seconds: int = int(os.getenv("OPENWEATHER_CACHE_SECONDS", "600"))
+
     line_channel_access_token: str = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     line_user_id: str = os.getenv("LINE_USER_ID", "")
     line_alert_enabled: bool = _env_bool("LINE_ALERT_ENABLED", False)

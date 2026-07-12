@@ -938,7 +938,10 @@
         const areaText = items.join(" ");
         const fallbackUsed = Boolean(queryMeta?.fallback_used);
         const usedScope = queryMeta?.used?.scope;
-        if (fallbackUsed && usedScope) {
+        const provider = queryMeta?.used?.provider;
+        if (provider === "openweather") {
+          badge.textContent = `${areaText} (สำรอง: OpenWeather)`;
+        } else if (fallbackUsed && usedScope) {
           badge.textContent = `${areaText} (fallback: ระดับ ${usedScope})`;
         } else {
           badge.textContent = areaText;

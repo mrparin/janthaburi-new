@@ -150,6 +150,7 @@ class TmdWeatherClient:
             candidates.append((None, None))
 
         last_not_found: TmdApiError | None = None
+        best_location: dict[str, Any] | None = None
         for idx, (a, t) in enumerate(candidates):
             try:
                 data = await self._fetch_daily_once(
@@ -175,12 +176,16 @@ class TmdWeatherClient:
                     },
                     "fallback_used": idx > 0 or used_scope != requested_scope,
                 }
+                if best_location is None and isinstance(data.get("location"), dict):
+                    best_location = data["location"]
                 if data.get("days"):
                     return data
 
                 # If no data and there is a broader candidate, keep trying.
                 if idx < len(candidates) - 1:
                     continue
+                if best_location is not None:
+                    data["location"] = best_location
                 return data
             except TmdApiError as exc:
                 if str(exc) != "place not found in TMD":
