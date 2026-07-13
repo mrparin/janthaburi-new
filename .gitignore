@@ -1,6 +1,22 @@
+# Python
 __pycache__/
 *.pyc
+.venv/
 venv/
-.env
 *.db-shm
-*.db-wal*.db
+*.db-wal
+
+# Environment files
+.env
+backend/.env
+
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/out/
+
+# Data
+*.db
+data/*.db
+backend/data/*.db
