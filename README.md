@@ -210,145 +210,200 @@ pkill -f "chromium|chromium-browser"
 - ถ้าหน้างานไม่ได้ใช้ broker ในเครื่องเดียวกัน ให้ตั้ง `MQTT_HOST` เป็น broker ปลายทาง
 - ถ้าเก็บข้อมูลจริงไว้ที่ server อยู่แล้ว แนะนำตั้ง `RETAIN_DAYS=90` (เก็บ local cache 3 เดือน)
 
-### 2) การ update software จาก git ใหม่
+### 2) นำโปรเจกต์ที่ทดสอบบน PC ไปอัปเดต Raspberry Pi
 
-ใช้เมื่อมีการเปลี่ยนแปลงซอฟต์แวร์ใหม่ใน repository
+ก่อนติดตั้ง ต้อง commit และ push โค้ดที่ทดสอบผ่านแล้วจาก PC ขึ้น remote repository ก่อน ตัวอย่างบน PowerShell:
 
-```bash
-cd /opt/durian-dashboard
+```powershell
+cd D:\codeArduino\vscode\janthaburi-new
 git status
 git branch --show-current
+git add <FILE_OR_DIRECTORY_1> <FILE_OR_DIRECTORY_2>
+git commit -m "Update Raspberry Pi dashboard"
+git push -u origin <BRANCH>
 ```
 
-กรณีต้องการอัปเดต branch `02_addweather` (แนะนำ):
+แทน `<BRANCH>` ด้วย branch ที่ต้องการ deploy เช่น `openweather-fallback` และระบุเฉพาะไฟล์โปรแกรมที่ต้องการใน `git add` ห้ามใช้ `git add .` โดยไม่ตรวจสอบ เพราะอาจเผลอ commit ฐานข้อมูลใน `data/` จากนั้นตรวจสอบว่า `git status` ไม่มีไฟล์โปรแกรมที่ยังไม่ได้ commit ก่อนดำเนินการบน Raspberry Pi
 
-```bash
-git fetch origin
-git switch 02_addweather
-git pull --ff-only origin 02_addweather
-```
+> คำสั่งต่อจากนี้รันผ่าน SSH บน Raspberry Pi และสมมติว่าโปรแกรมทำงานด้วย service `durian-dashboard` ที่ `/opt/durian-dashboard`
 
-ถ้าโครงการใช้ branch `main`:
+#### 2.1 ติดตั้งโดยใช้ repo เดิม แต่เปลี่ยน branch
 
-```bash
-git pull --ff-only origin main
-```
+ใช้กรณี Raspberry Pi clone repository ที่ถูกต้องไว้แล้ว แต่ต้องการเปลี่ยนไปใช้ branch อื่นใน repository เดิม
 
-ถ้าโครงการใช้ branch `master`:
-
-```bash
-git pull --ff-only origin master
-```
-
-ถ้า pull ไม่ได้เพราะมีไฟล์แก้ค้าง:
-
-```bash
-git stash
-git pull --ff-only origin 02_addweather
-git stash pop
-```
-
-อัปเดต dependency/service หลัง pull:
-
-```bash
-sudo bash scripts/setup_pi_kiosk.sh --yes
-sudo systemctl restart durian-dashboard
-```
-
-### 2.1) แทนที่ของเดิมด้วย repo นี้ (ใช้ได้ทั้ง Raspberry Pi และ Ubuntu Server)
-
-ใช้ขั้นตอนนี้เมื่อเครื่องมีระบบเดิมติดตั้งอยู่แล้ว และต้องการเก็บของเดิมไว้ก่อนแล้วค่อยลงตัวใหม่ทับตำแหน่งเดิม
-
-กำหนดค่าพื้นฐานก่อน (แก้ค่าให้ตรงเครื่องของคุณ):
+กำหนดค่าพื้นฐาน:
 
 ```bash
 APP_DIR=/opt/durian-dashboard
 APP_USER=pi
-REPO_URL=https://github.com/mrparin/janthaburi-new.git
-BRANCH=01_addThrems
+BRANCH=openweather-fallback
 ```
 
-> ถ้าเป็น Ubuntu Server มักใช้ `APP_USER=ubuntu` หรือ user จริงที่ใช้รัน service
-
-**ขั้นตอนที่ 1: หยุด service เดิม**
+ตรวจสอบว่าเป็น repo ที่ต้องการและดูสถานะไฟล์:
 
 ```bash
-sudo systemctl stop durian-dashboard || true
-sudo systemctl disable durian-dashboard || true
-sudo systemctl list-units --type=service | grep -i durian || true
+cd "$APP_DIR"
+git remote -v
+git branch --show-current
+git status
 ```
 
-**ขั้นตอนที่ 2: backup โฟลเดอร์โปรเจกต์เดิม (ถ้ามี)**
+หยุด service ก่อนสำรอง SQLite เพื่อให้ข้อมูลใน WAL ถูกเขียนกลับฐานข้อมูลหลักอย่างสมบูรณ์:
 
 ```bash
-if [ -d "$APP_DIR" ]; then
-  sudo mv "$APP_DIR" "${APP_DIR}-old-$(date +%Y%m%d-%H%M%S)"
-fi
-sudo ls -ld ${APP_DIR}-old-* 2>/dev/null || true
+sudo systemctl stop durian-dashboard
+sudo systemctl is-active durian-dashboard
 ```
 
-**ขั้นตอนที่ 3: clone repo ใหม่ลง path เดิม**
+ผลของคำสั่งสุดท้ายควรเป็น `inactive` จากนั้นสำรอง `.env`, ฐานข้อมูล และ diff ของไฟล์ที่แก้เฉพาะบน Pi:
 
 ```bash
-cd /opt
-sudo git clone -b "$BRANCH" "$REPO_URL" durian-dashboard
+BACKUP_DIR="$HOME/durian-backup-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP_DIR/data"
+cp -a "$APP_DIR/.env" "$BACKUP_DIR/" 2>/dev/null || true
+cp -a "$APP_DIR"/data/durian_dashboard.db* "$BACKUP_DIR/data/" 2>/dev/null || true
+git -C "$APP_DIR" diff > "$BACKUP_DIR/local-changes.patch"
+find "$BACKUP_DIR" -maxdepth 2 -type f -ls
+```
+
+ไฟล์ฐานข้อมูลของระบบรุ่นเก่าอาจยังถูก Git ติดตามอยู่ ต้องคืนเฉพาะไฟล์ฐานข้อมูลที่ Git ติดตามให้สะอาดชั่วคราวก่อนเปลี่ยน branch ข้อมูลจริงยังอยู่ใน `$BACKUP_DIR`:
+
+```bash
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+cd "$APP_DIR"
+git ls-files -z 'data/durian_dashboard.db*' | xargs -0 -r git restore --
+git status
+```
+
+หากยังมีไฟล์โปรแกรมอื่นแสดงเป็น `modified` ให้ตรวจ diff และ commit ที่ PC หรือสำรองให้เรียบร้อยก่อน ห้ามใช้ `git reset --hard` กับข้อมูลที่ยังไม่ได้สำรอง
+
+ดึงข้อมูลและเปลี่ยน branch:
+
+```bash
+git fetch origin
+git switch "$BRANCH"
+git pull --ff-only origin "$BRANCH"
+git log -1 --oneline
+```
+
+นำฐานข้อมูลจริงกลับมา โดยเก็บฐานข้อมูลที่มากับ branch ใหม่แยกไว้ก่อน:
+
+```bash
+REPO_DB_BACKUP="$BACKUP_DIR/repo-database"
+mkdir -p "$REPO_DB_BACKUP"
+mv "$APP_DIR"/data/durian_dashboard.db* "$REPO_DB_BACKUP/" 2>/dev/null || true
+cp -a "$BACKUP_DIR"/data/durian_dashboard.db* "$APP_DIR/data/"
 sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 ```
 
-**ขั้นตอนที่ 4: ย้ายค่า config/ฐานข้อมูลจาก backup เดิม (ทางเลือก)**
+อัปเดต Python dependencies และตรวจ syntax:
 
 ```bash
-LAST_BACKUP=$(ls -dt ${APP_DIR}-old-* 2>/dev/null | head -n 1)
 cd "$APP_DIR"
-cp .env.example .env
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m compileall -q app
+```
 
-# ถ้ามีไฟล์ .env เดิม ให้คัดลอกมาทับ
-if [ -n "$LAST_BACKUP" ] && [ -f "$LAST_BACKUP/.env" ]; then
-  cp "$LAST_BACKUP/.env" .env
+หาก branch ใหม่แก้ไฟล์ service หรือการตั้งค่า kiosk ให้รันสคริปต์ติดตั้งอีกครั้ง:
+
+```bash
+sudo env APP_DIR="$APP_DIR" PI_USER="$APP_USER" bash scripts/setup_pi_kiosk.sh --yes
+```
+
+ถ้าไม่ได้แก้ service/kiosk ให้เริ่ม service ได้ทันที:
+
+```bash
+sudo systemctl start durian-dashboard
+```
+
+#### 2.2 ติดตั้งโดยใช้ repo ชื่อใหม่ หรือ repository ใหม่
+
+ใช้กรณี URL ของ repository เปลี่ยน, ชื่อ repo ไม่เหมือนเดิม หรือต้องการ clone ใหม่ทั้งหมด โดยยังติดตั้งทับตำแหน่ง `/opt/durian-dashboard` เพื่อให้ service และ kiosk เดิมใช้งานต่อได้
+
+กำหนดค่าพื้นฐานให้ตรงกับ repository ใหม่:
+
+```bash
+APP_DIR=/opt/durian-dashboard
+APP_USER=pi
+REPO_URL=https://github.com/<OWNER>/<NEW_REPOSITORY>.git
+BRANCH=main
+```
+
+หยุด service และเปลี่ยนชื่อโฟลเดอร์เดิมเป็น backup ทั้งชุด:
+
+```bash
+sudo systemctl stop durian-dashboard
+OLD_DIR="${APP_DIR}-old-$(date +%Y%m%d-%H%M%S)"
+sudo mv "$APP_DIR" "$OLD_DIR"
+echo "Old installation: $OLD_DIR"
+```
+
+clone repository ใหม่ลง path ที่ service เดิมใช้งาน:
+
+```bash
+sudo git clone --branch "$BRANCH" --single-branch "$REPO_URL" "$APP_DIR"
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+```
+
+นำ `.env` และฐานข้อมูลจริงจากระบบเดิมกลับมา:
+
+```bash
+cd "$APP_DIR"
+if [ -f "$OLD_DIR/.env" ]; then
+  cp -a "$OLD_DIR/.env" .env
+else
+  cp .env.example .env
 fi
 
-# ถ้ามีฐานข้อมูลเดิม ให้คัดลอกมาทับ
-if [ -n "$LAST_BACKUP" ] && [ -f "$LAST_BACKUP/data/durian_dashboard.db" ]; then
-  cp "$LAST_BACKUP/data/durian_dashboard.db" data/durian_dashboard.db
-fi
-
+mkdir -p data
+NEW_REPO_DB_BACKUP="$HOME/new-repo-database-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$NEW_REPO_DB_BACKUP"
+mv data/durian_dashboard.db* "$NEW_REPO_DB_BACKUP/" 2>/dev/null || true
+cp -a "$OLD_DIR"/data/durian_dashboard.db* data/ 2>/dev/null || true
 sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 sudo chmod 600 "$APP_DIR/.env"
 ```
 
-**ขั้นตอนที่ 5: ติดตั้ง service ใหม่**
-
-- Raspberry Pi แบบ Kiosk:
+ติดตั้งแบบ Raspberry Pi Kiosk:
 
 ```bash
-cd "$APP_DIR"
-sudo PI_USER="$APP_USER" APP_DIR="$APP_DIR" bash scripts/setup_pi_kiosk.sh --yes
+sudo env APP_DIR="$APP_DIR" PI_USER="$APP_USER" bash scripts/setup_pi_kiosk.sh --yes
 ```
 
-- Raspberry Pi/Ubuntu แบบ Service Only:
+ถ้าใช้ Raspberry Pi แบบ service only และไม่เปิด browser อัตโนมัติ:
 
 ```bash
-cd "$APP_DIR"
-sudo PI_USER="$APP_USER" APP_DIR="$APP_DIR" bash scripts/setup_pi_service_only.sh --yes
+sudo env APP_DIR="$APP_DIR" PI_USER="$APP_USER" bash scripts/setup_pi_service_only.sh --yes
 ```
 
-**ขั้นตอนที่ 6: ตรวจสอบหลังติดตั้ง**
+#### 2.3 ตรวจสอบหลังติดตั้ง (ใช้กับทั้งสองกรณี)
 
 ```bash
 sudo systemctl status durian-dashboard --no-pager
-sudo ss -tulpn | grep 8080 || true
+sudo ss -ltnp | grep 8080
+curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8080/
+curl -s http://127.0.0.1:8080/api/latest
 sudo journalctl -u durian-dashboard -n 100 --no-pager
 ```
 
-**ขั้นตอนที่ 7: rollback กลับของเดิม (ถ้าจำเป็น)**
+หน้าเว็บและ `/api/latest` ควรตอบ `HTTP 200` หาก `curl -I` ตอบ `405 Method Not Allowed` ไม่ถือว่า service เสีย เพราะหน้า Dashboard รองรับ `GET` แต่ไม่ได้รองรับ `HEAD`
+
+#### 2.4 Rollback กลับไปใช้ระบบเดิม
+
+กรณีติดตั้งจาก repository ใหม่และต้องการย้อนกลับ:
 
 ```bash
 sudo systemctl stop durian-dashboard
 sudo mv "$APP_DIR" "${APP_DIR}-failed-$(date +%Y%m%d-%H%M%S)"
-sudo mv "$LAST_BACKUP" "$APP_DIR"
+sudo mv "$OLD_DIR" "$APP_DIR"
 sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+sudo systemctl daemon-reload
 sudo systemctl start durian-dashboard
+sudo systemctl status durian-dashboard --no-pager
 ```
+
+อย่าลบ `$BACKUP_DIR` หรือ `$OLD_DIR` จนกว่าจะตรวจสอบหน้า Dashboard, MQTT, พยากรณ์อากาศ และข้อมูลย้อนหลังครบแล้ว
 
 ### 3) หมายเหตุสำหรับ Ubuntu Server
 
